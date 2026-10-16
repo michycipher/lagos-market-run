@@ -28,6 +28,7 @@ const MARKETS = [
 ];
 const LANE_WIDTH=2.25, SEGMENT_LENGTH=16, STAGE_LENGTH=250, WATER_PRICE=20;
 const state={screen:'ready',distance:0,lane:0,suya:0,money:0,water:0,market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,
+  eyoTipSeen:localStorage.getItem('lagos-market-eyo-tip-seen')==='1',
   best:Number(localStorage.getItem('lagos-market-run-best-distance')||0)};
 let identity={name:'Guest',style:{}},signedIn=false;
 const soundtrack=new MarketAudio();
@@ -184,6 +185,13 @@ function makeEyo() {
   g.scale.setScalar(1.05);
   return g;
 }
+function makeAgbero() {
+  const g=createCharacter({body:'male',primaryColor:'#e1a52d',secondaryColor:'#174b45',hair:'short',hat:'cap'},.96);
+  box(g,.48,.45,.08,'#d34b32',0,1.18,.25); // bright conductor vest
+  cylinder(g,.045,.045,.55,'#30261e',.49,1.2,.22,8).rotation.z=-.72; // hand-held baton
+  const whistle=box(g,.08,.05,.08,'#f3c94c',-.22,1.05,.27);whistle.rotation.z=.2;
+  g.userData.goods='agbero';g.userData.agbero={whistle};return g;
+}
 function makeSuya() {
   const g=new THREE.Group();const tray=cylinder(g,.36,.3,.055,'#ddd2b6',0,.12,0,12);tray.scale.z=.68;
   for(let s=0;s<2;s++) {
@@ -334,8 +342,9 @@ function addBlocker(index,z,lane,kind='cart') {
     const marker=new THREE.Group();const light=cylinder(marker,.42,.42,.025,'#edbd39',lane*LANE_WIDTH,.02,z,12);world.add(marker);
     const call=goods==='clothes'?'FINE ANKARA!':goods==='shoes'?'TRY THESE SHOES!':goods==='bags'?'FINE BAGS!':'CUSTOMER, COME!';
     sign(marker,call,lane*LANE_WIDTH,2.65,z,2.5,'#fff0cb');marker.visible=false;
-    obj.userData.goods=goods;traders.push({obj,segment:index,z,lane,side,from:side*4.9,target:lane*LANE_WIDTH,phase:0,warning:false,marker,swerve:index%3!==0});
+    obj.userData.goods=goods;traders.push({obj,segment:index,z,lane,side,from:side*4.9,target:lane*LANE_WIDTH,phase:0,warning:false,marker,swerve:false});
   } else if(kind==='eyo') {obj=makeEyo();obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,baseX:lane*LANE_WIDTH,width:.48,depth:.58,kind:'Eyo masquerade'});}
+  else if(kind==='agbero') {obj=makeAgbero();obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,baseX:lane*LANE_WIDTH,width:.56,depth:.62,kind:'agbero'});}
   else {obj=makeCart(MARKETS[stage][3][index%4]);obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,width:.65,depth:.75,kind:'stock trolley'});}
   world.add(obj);return obj;
 }
@@ -395,7 +404,7 @@ function addRow(index) {
   if(index>=2){
     // Keep the opening seller on the left so the starting lane always has a clean pass.
     const lane=index===2?-1:Math.floor(random(index,2)*3)-1;
-    const kind=index===2||random(index,4)<.52?'trader':index%7===0?'eyo':'cart';
+    const kind=index===2||random(index,4)<.52?'trader':index%7===0?'eyo':index%5===0?'agbero':'cart';
     addBlocker(index,-index*SEGMENT_LENGTH-1,lane,kind);
     if(stage>=2||index%3===0){const lane2=lane===1?-1:1;addBlocker(index,-index*SEGMENT_LENGTH-1,lane2,index%5===0?'trader':'cart');}
   }
@@ -438,7 +447,7 @@ function startRun() {
   lastShout=-99;
   player.position.set(0,0,0);player.rotation.set(0,Math.PI,0);cameraZ=-4;
   ensureWorld();
-  for(const id of ['title-overlay','gameover-overlay','pause-overlay','stage-banner'])$('#'+id).classList.add('hidden');
+  for(const id of ['title-overlay','gameover-overlay','pause-overlay','eyo-tutorial-overlay','stage-banner'])$('#'+id).classList.add('hidden');
   $('#move-hint').classList.remove('hidden');$('#touch-controls').classList.remove('hidden');
   $('#pause-button').textContent='Ⅱ';$('#pause-button').setAttribute('aria-label','Pause game');
   soundtrack.start(0);refreshHUD();canvas.focus();
@@ -467,6 +476,20 @@ function enterMarket() {
   if(next===state.market)return;state.market=next;state.bannerUntil=state.time+2.6;
   $('#stage-name').textContent=MARKETS[next][0];$('#stage-banner').classList.remove('hidden');soundtrack.market=next;soundtrack.effect('stage');
 }
+function buyWater(hawker) {
+  if(!hawker||hawker.bought||state.money<WATER_PRICE)return false;
+  state.money-=WATER_PRICE;state.water++;hawker.bought=true;hawker.obj.visible=false;hawker.marker.visible=false;
+  soundtrack.effect('purchase');shout('THANK YOU! PURE WATER FOR YOUR JOURNEY!',1);refreshHUD();return true;
+}
+function showEyoTip() {
+  if(state.eyoTipSeen)return;
+  state.eyoTipSeen=true;localStorage.setItem('lagos-market-eyo-tip-seen','1');state.screen='paused';soundtrack.pause();
+  $('#eyo-tutorial-overlay').classList.remove('hidden');refreshHUD();
+}
+function dismissEyoTip() {
+  $('#eyo-tutorial-overlay').classList.add('hidden');
+  if(state.screen==='paused'){state.screen='playing';soundtrack.start(state.market);canvas.focus();refreshHUD();}
+}
 function throwWater() {
   if(state.screen!=='playing'||state.water<1)return false;
   const target=obstacles.filter(o=>o.kind==='Eyo masquerade'&&!o.fleeing).sort((a,b)=>Math.abs(a.obj.position.z-player.position.z)-Math.abs(b.obj.position.z-player.position.z))[0];
@@ -478,7 +501,7 @@ function interact() {
   if(state.screen!=='playing')return;
   const hawker=waterHawkers.find(item=>!item.bought&&Math.abs(-item.z-state.distance)<3.4&&Math.abs(item.obj.position.x-player.position.x)<1.1);
   if(hawker){
-    if(state.money>=WATER_PRICE){state.money-=WATER_PRICE;state.water++;hawker.bought=true;hawker.obj.visible=false;hawker.marker.visible=false;soundtrack.effect('purchase');shout('THANK YOU! PURE WATER FOR YOUR JOURNEY!',1);refreshHUD();}
+    if(state.money>=WATER_PRICE)buyWater(hawker);
     else {soundtrack.effect('warn');shout('CUSTOMER! BRING MONEY FIRST!',1);}
     return;
   }
@@ -528,12 +551,18 @@ function update(delta) {
       if(ahead<20&&ahead>-3)hawker.phase=Math.min(1,hawker.phase+delta*.9);
       const ease=hawker.phase*hawker.phase*(3-2*hawker.phase);hawker.obj.position.x=THREE.MathUtils.lerp(hawker.from,hawker.target,ease);hawker.obj.userData.joints.rightArm.rotation.z=-.7+Math.sin(state.time*7)*.28;
       if(ahead<-3)hawker.marker.visible=false;
-      if(Math.abs(hawker.z-player.position.z)<.72&&Math.abs(hawker.obj.position.x-player.position.x)<.62){finishRun('water hawker');break;}
+      // Hawkers are friendly: they never collide with or punish the runner.
+      if(ahead<1.8&&ahead>-1.5&&Math.abs(hawker.obj.position.x-player.position.x)<1.1&&state.money>=WATER_PRICE)buyWater(hawker);
+    }
+    if(state.screen==='playing')for(const o of obstacles)if(o.kind==='agbero'){
+      o.obj.position.x=o.baseX+Math.sin(state.time*3+o.segment)*.18;
+      o.obj.userData.agbero.whistle.rotation.z=.2+Math.sin(state.time*7)*.18;
+      o.obj.userData.joints.rightArm.rotation.z=-.65+Math.sin(state.time*6)*.12;
     }
     if(state.screen==='playing')for(const o of obstacles)if(o.kind==='Eyo masquerade'){
       const ahead=-o.obj.position.z-state.distance;
       if(o.fleeing){o.obj.position.z-=delta*(10+state.market*.3);o.z=o.obj.position.z;continue;}
-      if(ahead<23&&ahead>-5&&!o.chasing){o.chasing=true;soundtrack.effect('eyo');shout('EYO DEY CHASE YOU! RUN!',1.4);}
+      if(ahead<23&&ahead>-5&&!o.chasing){o.chasing=true;soundtrack.effect('eyo');shout('EYO DEY CHASE YOU! RUN!',1.4);showEyoTip();}
       // Eyo advances down its own lane, but never tracks the player's lane.
       // One clean dodge is enough to pass; the scare comes from its speed and animation.
       if(o.chasing&&!o.stunned){o.obj.position.z+=delta*(5.2+state.market*.3);o.obj.position.x=o.baseX+Math.sin(state.time*2.5+o.segment)*.16;o.obj.rotation.z=Math.sin(state.time*10)*.12;o.obj.userData.scare.arms.forEach((arm,i)=>arm.rotation.z=(i?-1:1)*(.95+Math.sin(state.time*12)*.25));o.z=o.obj.position.z;}
@@ -600,9 +629,10 @@ async function loadLeaderboard() {
 
 const keyMap={ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right'};
 window.addEventListener('keydown',event=>{
-  if(document.querySelector('dialog[open]'))return;
+  if(document.querySelector('dialog[open]')||!$('#eyo-tutorial-overlay').classList.contains('hidden'))return;
   const key=event.key.length===1?event.key.toLowerCase():event.key;
   if(keyMap[key]){event.preventDefault();if(!event.repeat)move(keyMap[key]);}
+  else if(key==='ArrowUp'||key==='w'){event.preventDefault();if(!event.repeat)throwWater();}
   else if(key===' '||key==='e'){event.preventDefault();if(!event.repeat)interact();}
   else if(key==='p'||key==='Escape'){event.preventDefault();togglePause();}
   else if(key==='Enter'&&(state.screen==='ready'||state.screen==='gameover'))startRun();
@@ -624,8 +654,8 @@ canvas.addEventListener('pointerup',event=>{
 canvas.addEventListener('pointercancel',()=>{pointerStart=null;});
 for(const b of document.querySelectorAll('[data-move]'))b.addEventListener('pointerdown',event=>{event.preventDefault();move(b.dataset.move);});
 for(const b of document.querySelectorAll('[data-action="interact"]'))b.addEventListener('pointerdown',event=>{event.preventDefault();interact();});
-$('#start-button').onclick=startRun;$('#restart-button').onclick=startRun;$('#pause-button').onclick=togglePause;$('#resume-button').onclick=togglePause;
-$('#home-button').onclick=()=>{state.screen='ready';soundtrack.pause();player.rotation.set(0,0,0);$('#gameover-overlay').classList.add('hidden');$('#title-overlay').classList.remove('hidden');refreshHUD();};
+$('#start-button').onclick=startRun;$('#restart-button').onclick=startRun;$('#pause-button').onclick=togglePause;$('#resume-button').onclick=togglePause;$('#eyo-tutorial-button').onclick=dismissEyoTip;
+$('#home-button').onclick=()=>{state.screen='ready';soundtrack.pause();player.rotation.set(0,0,0);$('#gameover-overlay').classList.add('hidden');$('#eyo-tutorial-overlay').classList.add('hidden');$('#title-overlay').classList.remove('hidden');refreshHUD();};
 $('#sign-in-button').onclick=()=>{location.href=`${START_NG}/?return_to=${encodeURIComponent(location.origin+location.pathname)}`;};
 let resumeAfterDialog=false;
 for(const b of document.querySelectorAll('[data-open]'))b.onclick=()=>{resumeAfterDialog=state.screen==='playing';if(resumeAfterDialog)togglePause();$('#'+b.dataset.open).showModal();if(b.dataset.open==='board-dialog')loadLeaderboard();};

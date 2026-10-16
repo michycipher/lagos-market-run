@@ -13,14 +13,15 @@ Serve the folder with `python3 -m http.server 4173` and open `http://localhost:4
 - Mouse: move across the playfield or click a lane to steer
 - Touch: swipe sideways or tap the left/right buttons
 - `P`: pause/resume
-- `Space` or `E`: buy a ₦20 pure water sachet when a hawker steps into your lane, or throw water at a chasing Eyo
+- `↑` or `W`: fire pure water at a chasing Eyo
+- `Space` or `E`: buy a ₦20 pure water sachet early, if needed; friendly hawkers also sell automatically when you meet them with enough cash
 - Touch controls are included for mobile play
 
 ## Lagos route
 
 Every 250 metres unlocks a new market. The route runs through Balogun, Mushin, Yaba, Tejuosho, Oyingbo, Oshodi, Mile 12, Computer Village, Ladipo, Alaba International, Idumota, Jankara, Epe Fish Market, Ajah, Ikotun, Igando, Lekki, Agbalata, and Sangotedo. Running speed and obstacle density increase. Segments are generated ahead and pruned behind the player, with at least one unblocked lane per obstacle group.
 
-Market inventory changes in the 3D scene: Balogun has patterned clothing racks, shoes and handbags; Mushin has food sellers; Mile 12 has tomatoes, peppers, onions and yam; Computer Village has phones and laptops; Ladipo has tyres and motor parts; Epe has fish; Lekki has art, baskets and beads. Tejuosho becomes a multi-storey mall frontage with an outside market, road-side sellers and a Yaba footbridge. Traders hold merchandise, wave, shout and sometimes swerve into the aisle after a visible warning. Cash drops are rare, pure water costs ₦20, Eyo chases the runner, and road-crossing traffic can end a run.
+Market inventory changes in the 3D scene: Balogun has patterned clothing racks, shoes and handbags; Mushin has food sellers; Mile 12 has tomatoes, peppers, onions and yam; Computer Village has phones and laptops; Ladipo has tyres and motor parts; Epe has fish; Lekki has art, baskets and beads. Tejuosho becomes a multi-storey mall frontage with an outside market, road-side sellers and a Yaba footbridge. Traders hold merchandise, wave, shout and step into a fixed lane after a visible warning. Agberos are physical lane obstacles. Cash drops are rare, pure-water hawkers are friendly, water costs ₦20, Eyo chases the runner, and road-crossing traffic can end a run.
 
 References used for the market themes: [Lagos wholesale market specialities](https://towobo.com/pt/suppliers/wholesale-suppliers-in-lagos), [Mushin, Oyingbo and Mile 12 food markets](https://24hoursmarket.com/cheapest-markets-in-lagos-for-food-2026-guide/), and the [Tejuosho market directory](https://portal.tejuoshoshoppingcomplex.com/market-info). Stalls and trader names are fictional game scenery.
 
