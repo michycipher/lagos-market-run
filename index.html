@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#c46134" />
   <meta name="description" content="Run through a lively 3D Lagos market. Dodge traders, weave past stock trolleys, and collect suya among fabric shops and fresh produce stalls." />
   <title>Lagos Market Run</title>
-  <link rel="stylesheet" href="./style.css?v=market-run2" />
+  <link rel="stylesheet" href="./style.css?v=market-run3" />
 </head>
 <body>
   <main id="game" aria-label="Lagos Market Run 3D game">
@@ -20,6 +20,8 @@
       <div class="hud-actions">
         <div class="score-card"><strong id="distance-value">0</strong><span>METRES</span></div>
         <div class="suya-card" aria-label="Suya collected"><span aria-hidden="true">♨</span><strong id="suya-value">0</strong></div>
+        <div class="cash-card" aria-label="Cash collected"><span aria-hidden="true">₦</span><strong id="money-value">0</strong></div>
+        <div class="water-card" aria-label="Pure water held"><span aria-hidden="true">💧</span><strong id="water-value">0</strong></div>
         <button id="pause-button" class="round-button" aria-label="Pause game">Ⅱ</button>
         <button id="sound-button" class="round-button" aria-label="Sound and music settings" data-open="sound-dialog">♫</button>
       </div>
@@ -38,7 +40,7 @@
     <section id="gameover-overlay" class="panel hidden" aria-label="Run results">
       <span class="eyebrow">Omo! Lagos no dey wait.</span>
       <h2 id="gameover-title">Mind the market hustle!</h2>
-      <div class="results"><div><strong id="final-distance">0m</strong><span>DISTANCE</span></div><div><strong id="final-suya">0</strong><span>SUYA</span></div></div>
+      <div class="results"><div><strong id="final-distance">0m</strong><span>DISTANCE</span></div><div><strong id="final-suya">0</strong><span>SUYA</span></div><div><strong id="final-money">₦0</strong><span>CASH</span></div></div>
       <p id="save-message"></p>
       <button id="restart-button" class="primary-button">Run it back <span>↗</span></button>
       <div class="panel-links"><button data-open="board-dialog">🏆 Leaderboard</button><button id="home-button">Back to menu</button></div>
@@ -46,17 +48,18 @@
     <section id="pause-overlay" class="panel small hidden" aria-label="Paused">
       <span class="eyebrow">TAKE A BREATHER</span><h2>Market break.</h2><p>The street will wait.</p><button id="resume-button" class="primary-button">Keep going →</button>
     </section>
-    <div id="move-hint" class="move-hint hidden"><strong>Keep running!</strong><span>← → to dodge · traders step into your path</span></div>
+    <div id="move-hint" class="move-hint hidden"><strong>Keep running!</strong><span>← → dodge · Space buys water or stones Eyo</span></div>
     <nav id="touch-controls" class="touch-controls hidden" aria-label="Movement controls">
       <button data-move="left" aria-label="Move left">←</button>
+      <button data-action="interact" aria-label="Buy pure water or throw water">💧</button>
       <button data-move="right" aria-label="Move right">→</button>
     </nav>
     <p id="loading" class="loading">Opening the market…</p>
     <p id="render-error" class="render-error hidden" role="alert">This game needs WebGL 2. Enable hardware acceleration or try a recent browser.</p>
     <dialog id="board-dialog" class="modal"><button class="close-button" data-close aria-label="Close leaderboard">×</button><span class="eyebrow">LAGOS LEGENDS</span><h2>Market champions</h2><ol id="leaderboard-list"></ol><p>Your best distance and suya save with start.ng.</p><button id="refresh-board" class="secondary-button">Refresh board</button></dialog>
     <dialog id="route-dialog" class="modal"><button class="close-button" data-close aria-label="Close market route">×</button><span class="eyebrow">19 STOPS. ONE CITY.</span><h2>The Lagos route</h2><p>A new market every 250 metres. Balogun's fabrics give way to Mushin's food sellers, Yaba's thrift shops and more. The run gets faster and the aisles busier.</p><ol id="market-route"></ol></dialog>
-    <dialog id="sound-dialog" class="modal"><button class="close-button" data-close aria-label="Close sound settings">×</button><span class="eyebrow">THE SOUND OF THE HUSTLE</span><h2>Market groove</h2><p>An original highlife-inspired groove with percussion, plucked melody and bass. Footsteps, trader warnings and roadside horns keep you in the market.</p><label class="volume-label" for="music-volume">Music <output id="music-level">42%</output></label><input id="music-volume" type="range" min="0" max="100" value="42"><label class="volume-label" for="effects-volume">Effects & ambience <output id="effects-level">70%</output></label><input id="effects-volume" type="range" min="0" max="100" value="70"><div class="audio-buttons"><button id="preview-music" class="secondary-button">Preview the market groove</button><button id="audio-toggle" class="secondary-button">Mute all sound</button></div></dialog>
+    <dialog id="sound-dialog" class="modal"><button class="close-button" data-close aria-label="Close sound settings">×</button><span class="eyebrow">THE SOUND OF THE HUSTLE</span><h2>Market groove</h2><p>An original highlife-inspired groove with percussion, plucked melody and bass. Footsteps, trader warnings, hawker calls and roadside horns keep you in the market.</p><label class="volume-label" for="music-volume">Music <output id="music-level">42%</output></label><input id="music-volume" type="range" min="0" max="100" value="42"><label class="volume-label" for="effects-volume">Effects & ambience <output id="effects-level">70%</output></label><input id="effects-volume" type="range" min="0" max="100" value="70"><div class="audio-buttons"><button id="preview-music" class="secondary-button">Preview the market groove</button><button id="audio-toggle" class="secondary-button">Mute all sound</button></div></dialog>
   </main>
-  <script type="module" src="./game.js?v=market-run2"></script>
+  <script type="module" src="./game.js?v=market-run3"></script>
 </body>
 </html>

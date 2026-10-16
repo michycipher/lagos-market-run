@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import { MarketAudio } from './market-audio.js';
+import { MarketAudio } from './market-audio.js?v=market-run3';
 
 const START_NG = 'https://start.ng';
 const API = 'https://api.start.ng';
@@ -9,7 +9,7 @@ const MARKETS = [
   ['Balogun Market','ANKARA, SHOES & BAGS','#d45532',['clothes','shoes','bags','clothes']],
   ['Mushin Market','FOODSTUFF & PROVISIONS','#1d8d78',['onions','meat','grains','tomatoes']],
   ['Yaba Market','OKRIKA & SNEAKERS','#336dba',['clothes','shoes','books','bags']],
-  ['Tejuosho Market','FASHION & FABRICS','#a251a0',['clothes','bags','shoes','clothes']],
+  ['Tejuosho Market','MALL, FABRICS & OKRIKA','#a251a0',['clothes','bags','shoes','clothes']],
   ['Oyingbo Market','FOODSTUFF & FRESH FISH','#d57329',['meat','fish','grains','onions']],
   ['Oshodi Market','CLOTHES & EVERYDAY FINDS','#238d72',['shoes','clothes','bags','tomatoes']],
   ['Mile 12 Market','TOMATOES, PEPPER & ONIONS','#c44e2f',['tomatoes','peppers','onions','yam']],
@@ -26,13 +26,13 @@ const MARKETS = [
   ['Agbalata Market','BADAGRY FOOD & BASKETS','#cf7a36',['fish','grains','baskets','yam']],
   ['Sangotedo Market','FRESH FOOD & SUYA','#a76135',['meat','peppers','provisions','onions']]
 ];
-const LANE_WIDTH=2.25, SEGMENT_LENGTH=16, STAGE_LENGTH=250;
-const state={screen:'ready',distance:0,lane:0,suya:0,market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,
+const LANE_WIDTH=2.25, SEGMENT_LENGTH=16, STAGE_LENGTH=250, WATER_PRICE=20;
+const state={screen:'ready',distance:0,lane:0,suya:0,money:0,water:0,market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,
   best:Number(localStorage.getItem('lagos-market-run-best-distance')||0)};
 let identity={name:'Guest',style:{}},signedIn=false;
 const soundtrack=new MarketAudio();
 let framePromise,player,limbs,cameraZ=4,previousTime=0,lastHud=-1;
-const rows=new Map(),vehicles=[],traders=[],collectibles=[],obstacles=[],shopkeepers=[];
+const rows=new Map(),vehicles=[],traders=[],collectibles=[],moneyDrops=[],waterHawkers=[],obstacles=[],shopkeepers=[];
 const materialCache = new Map(), geometryCache = new Map();
 const canvas = $('#game-canvas');
 let renderer;
@@ -164,11 +164,21 @@ function makeVehicle(kind='danfo',color='#eebd24') {
   g.userData={length,wheels:wheelList,kind};return g;
 }
 function makeEyo() {
-  const g=new THREE.Group();cylinder(g,.18,.5,1.5,'#fff7df',0,.85,0,12);sphere(g,.23,'#fff8e9',0,1.69,0);
-  cylinder(g,.51,.51,.045,'#fff8e9',0,1.99,0);cylinder(g,.04,.23,.4,'#fff8e9',0,2.16,0);
-  for(const x of [-.08,.08])sphere(g,.025,'#302f26',x,1.75,.2);
-  const staff=cylinder(g,.026,.026,2.1,'#b79b54',.52,1.05,0,8);staff.rotation.z=-.13;
-  for(const x of [-.27,.27]){const arm=cylinder(g,.06,.1,.65,'#fff7df',x,1.28,0);arm.rotation.z=x<0?.7:-.7;}
+  const g=new THREE.Group();
+  const robe=cylinder(g,.38,.7,1.8,'#17151b',0,.92,0,12);robe.scale.z=.72;
+  for(const x of [-.36,.36]){const hem=box(g,.25,.1,.55,'#5f1e2c',x,.1,0);hem.rotation.z=x<0?.12:-.12;}
+  const veil=sphere(g,.4,'#31242b',0,1.76,0,.9,1.2,.8);
+  const mask=box(g,.48,.52,.18,'#e8d7bc',0,1.75,.16);mask.rotation.z=.02;
+  box(g,.32,.08,.04,'#431b25',0,1.89,.27);
+  const eyes=[];for(const x of [-.11,.11])eyes.push(sphere(g,.043,'#e83f39',x,1.82,.27,1,.8,.65));
+  const mouth=box(g,.2,.06,.04,'#20151a',0,1.63,.28);mouth.rotation.z=-.05;
+  // A tall crowned headdress makes Eyo readable even when the camera is pulled back.
+  cylinder(g,.52,.38,.12,'#f0e3c8',0,2.08,0,12);cylinder(g,.33,.16,.5,'#eee0c1',0,2.35,0,10);
+  for(const x of [-.22,0,.22]){const spike=cylinder(g,0,.09,.42,'#d3bd94',x,2.67,0,5);spike.rotation.z=x*.55;}
+  const staff=cylinder(g,.035,.055,2.6,'#34251e',.62,1.24,0,8);staff.rotation.z=-.2;
+  const staffTop=sphere(g,.14,'#e2ad3f',.84,2.52,0,.8,1.25,.8);
+  const arms=[];for(const x of [-.34,.34]){const arm=cylinder(g,.08,.12,.82,'#211820',x,1.25,0);arm.rotation.z=x<0?.95:-.95;arms.push(arm);}
+  g.userData.scare={robe,veil,eyes,arms,staff,staffTop,mouth};
   return g;
 }
 function makeSuya() {
@@ -180,6 +190,26 @@ function makeSuya() {
   for(let i=0;i<3;i++) sphere(g,.065,'#e3d2a9',.21,.21,.1+i*.08,1,.3,1);
   return g;
 }
+function makeMoney() {
+  const g=new THREE.Group();const coin=cylinder(g,.25,.25,.07,'#f1bf36',0,.15,0,16);coin.rotation.x=Math.PI/2;
+  const inner=ring(g,.15,.025,'#fff0a8',0,.19,.04);inner.rotation.x=Math.PI/2;
+  sign(g,'₦',0,.23,.055,.4,'#f1bf36');return g;
+}
+function makeWaterHawker() {
+  const g=createCharacter({body:'female',primaryColor:'#e2a52e',secondaryColor:'#2b6583',hair:'bun'},.9);
+  const tray=box(g,1.05,.13,.7,'#e4d9bb',0,2.14,0);tray.rotation.z=.02;
+  for(let i=0;i<5;i++){const bag=box(g,.14,.28,.12,i%2?'#9bd8e8':'#d5f4f0',-.4+i*.2,2.34,0);bag.rotation.z=(i-2)*.08;}
+  g.userData.goods='pure-water';return g;
+}
+function addMoneyDrop(index,z,lane) {
+  const obj=makeMoney();obj.position.set(lane*LANE_WIDTH,.34,z);world.add(obj);
+  moneyDrops.push({obj,segment:index,z,lane,collected:false,value:20});
+}
+function addWaterHawker(index,z,lane) {
+  const side=index%2?-1:1,obj=makeWaterHawker();obj.position.set(side*4.9,0,z);obj.rotation.y=side<0?Math.PI/2:-Math.PI/2;world.add(obj);
+  const marker=new THREE.Group();sign(marker,'PURE WATER ₦20',lane*LANE_WIDTH,2.7,z,2.7,'#aee6e9');marker.visible=false;world.add(marker);
+  waterHawkers.push({obj,segment:index,z,lane,side,from:side*4.9,target:lane*LANE_WIDTH,phase:0,warning:false,bought:false,marker});
+}
 function barrel(parent,x,z) {
   cylinder(parent,.39,.39,.95,'#297f9d',x,.5,z,12);
   cylinder(parent,.41,.41,.09,'#226c87',x,.17,z,12);cylinder(parent,.41,.41,.09,'#226c87',x,.78,z,12);
@@ -190,6 +220,11 @@ function tree(parent,x,z) {
   sphere(parent,.7,'#7c9647',x+.4,2.85,z-.2);
 }
 function random(index,salt=0) { const v=Math.sin(index*127.1+salt*311.7+42.3)*43758.5453;return v-Math.floor(v); }
+let lastShout=-99;
+function shout(text,gap=2.2) {
+  if(state.time<lastShout+gap)return;
+  lastShout=state.time;soundtrack.voice(text,{rate:1.18,pitch:.96});
+}
 const shopNames={clothes:['MAMA TITI ANKARA','LACE & ASO EBI','BISI TEXTILES'],shoes:['CHIKA SHOES','SNEAKER CORNER'],bags:['BOLA BAGS','LEATHER HOUSE'],
   onions:['ALHAJA ONIONS'],tomatoes:['FRESH TOMATOES'],peppers:['ATA RODO'],meat:['BABA BUTCHER','SUYA SPOT'],grains:['RICE, BEANS & GARRI'],fish:['EJA TUTU','FRESH FISH'],yam:['YAM DEPOT'],
   phones:['PHONE PLAZA'],laptops:['LAPTOP REPAIRS'],speakers:['SOUND & SOLAR'],televisions:['TV & ELECTRONICS'],tyres:['TOKUNBO TYRES'],engines:['ENGINE SPARES'],batteries:['BATTERY DEPOT'],
@@ -296,33 +331,74 @@ function addBlocker(index,z,lane,kind='cart') {
     const marker=new THREE.Group();const light=cylinder(marker,.42,.42,.025,'#edbd39',lane*LANE_WIDTH,.02,z,12);world.add(marker);
     const call=goods==='clothes'?'FINE ANKARA!':goods==='shoes'?'TRY THESE SHOES!':goods==='bags'?'FINE BAGS!':'CUSTOMER, COME!';
     sign(marker,call,lane*LANE_WIDTH,2.65,z,2.5,'#fff0cb');marker.visible=false;
-    traders.push({obj,segment:index,z,lane,side,from:side*4.9,target:lane*LANE_WIDTH,phase:0,warning:false,marker});
+    obj.userData.goods=goods;traders.push({obj,segment:index,z,lane,side,from:side*4.9,target:lane*LANE_WIDTH,phase:0,warning:false,marker,swerve:index%3!==0});
   } else if(kind==='eyo') {obj=makeEyo();obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,width:.6,depth:.65,kind:'Eyo masquerade'});}
   else {obj=makeCart(MARKETS[stage][3][index%4]);obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,width:.65,depth:.75,kind:'stock trolley'});}
   world.add(obj);return obj;
 }
+function tejuoshoScene(group,index) {
+  // Tejuosho reads as a structured shopping complex behind the open-air stalls.
+  if(index%2===0)for(const side of [-1,1]){
+    const mall=new THREE.Group();mall.userData.kind='tejuosho-mall';mall.position.set(side*8.5,0,0);group.add(mall);
+    box(mall,3.8,4.6,14,'#d9c4a5',0,2.3,0);box(mall,3.5,.18,13.8,'#b54e45',0,4.58,0);
+    for(const floor of [1.45,3.1]){
+      box(mall,3.5,.1,13.7,'#8e6d5c',0,floor,0);
+      for(let i=0;i<5;i++){box(mall,.5,.78,.05,side<0?'#79b9bd':'#6ea2ad',-1.25+i*.62,floor+.48,7.08);box(mall,.5,.78,.05,side<0?'#79b9bd':'#6ea2ad',-1.25+i*.62,floor+.48,-7.08);}
+    }
+    for(const x of [-1.65,1.65])box(mall,.14,4.4,.14,'#6d5145',x,2.3,7.08);
+    sign(mall,'TEJUOSHO MALL',0,4.05,7.16,3.2,'#f3c737');
+  }
+  if(index%4===0){
+    const bridge=new THREE.Group();bridge.userData.kind='tejuosho-footbridge';bridge.position.set(-10.5,0,0);group.add(bridge);
+    box(bridge,5.4,.42,1.25,'#d6c7ad',0,4.35,0);box(bridge,5.4,.12,1.25,'#7e5d4d',0,4.85,0);
+    for(const x of [-2.35,-1.55,-.75,.05,.85,1.65,2.35])box(bridge,.08,.55,.08,'#735548',x,4.62,.52);
+    box(bridge,.12,4.2,.12,'#6d5145',-2.55,2.1,0);box(bridge,.12,4.2,.12,'#6d5145',2.55,2.1,0);
+    const leftSteps=box(bridge,1.35,1.2,1.1,'#a57958',-3.2,1.1,0);leftSteps.rotation.z=-.25;
+    const rightSteps=box(bridge,1.35,1.2,1.1,'#a57958',3.2,1.1,0);rightSteps.rotation.z=.25;
+    sign(bridge,'YABA FOOTBRIDGE',0,5.2,.68,2.7,'#f3c737');
+  }
+  if(index%2===0){
+    for(const side of [-1,1]){box(group,3.2,.08,1.2,'#8a563a',side*5.15,1.18,2.8);box(group,.1,2.3,.1,'#594231',side*3.8,1.2,2.8);box(group,.1,2.3,.1,'#594231',side*6.5,1.2,2.8);}
+    sign(group,'OUTSIDE MARKET',0,3.5,2.8,3.0,'#ef9b43');
+  }
+}
+function addRoadCrossing(index,z) {
+  const row=rows.get(index);if(row){
+    box(row,9.3,.08,2.8,'#4f504c',0,.05,0);
+    for(let x=-3.8;x<=3.8;x+=1.25)box(row,.62,.1,2.55,'#f0dfb0',x,.12,0);
+    sign(row,'LOOK LEFT • LOOK RIGHT',0,2.35,1.55,3.2,'#f4d34f');
+  }
+  const obj=makeVehicle(index%2?'keke':'danfo',index%2?'#228f5b':'#edb91c');obj.position.set(-18,0,z);obj.rotation.y=0;world.add(obj);
+  vehicles.push({obj,segment:index,speed:7.2+Math.min(3,state.market*.25),crossing:true});
+  obstacles.push({obj,segment:index,z,lane:0,width:1.1,depth:1.35,kind:'road traffic',crossing:true});
+}
 function addRow(index) {
   const group=new THREE.Group();group.position.z=-index*SEGMENT_LENGTH;group.userData.index=index;world.add(group);rows.set(index,group);
-  const market=MARKETS[Math.min(18,Math.floor(Math.max(0,index*SEGMENT_LENGTH)/STAGE_LENGTH))];
+  const stage=Math.min(18,Math.floor(Math.max(0,index*SEGMENT_LENGTH)/STAGE_LENGTH)),market=MARKETS[stage];
   const ground=box(group,80,.16,SEGMENT_LENGTH+.02,'#b68a57',0,-.12,0);ground.castShadow=false;
   const aisle=box(group,9,.14,SEGMENT_LENGTH+.02,index%2?'#c47d49':'#ce8751',0,-.07,0);aisle.castShadow=false;
   // Market paving and shop drainage define a continuous aisle, not road crossings.
   for(const side of [-1,1]){box(group,.16,.08,SEGMENT_LENGTH,'#8a7658',side*4.5,-.02,0);for(const z of [-6,-2,2,6])box(group,.22,.025,1.1,'#544f42',side*4.5,.03,z);}
   for(let z=-7;z<8;z+=2){const joint=box(group,8.7,.008,.025,'#b97a49',0,.008,z);joint.castShadow=false;}
   for(const side of [-1,1])for(let slot=0;slot<2;slot++)stall(group,side,-4+slot*8,index,slot);
+  if(stage===3)tejuoshoScene(group,index);
   // Service road runs beside the shops. Vehicles never drive through the runner's aisle.
   box(group,4.2,.1,SEGMENT_LENGTH+.02,'#55534a',-12.7,-.04,0);box(group,.2,.12,SEGMENT_LENGTH,'#dec495',-10.5,.02,0);
   for(const z of [-6,0,6])box(group,.06,.018,2,'#e8d6ac',-12.7,.02,z);
-  if(index%3===0){const obj=makeVehicle(index%2?'keke':'danfo',index%2?'#228f5b':'#edb91c');obj.position.set(-12.7,0,-index*SEGMENT_LENGTH);obj.rotation.y=Math.PI/2;world.add(obj);vehicles.push({obj,segment:index,speed:4.8});}
+  if(index%2===0){const obj=makeVehicle(index%2?'keke':'danfo',index%2?'#228f5b':'#edb91c');obj.position.set(-12.7,0,-index*SEGMENT_LENGTH);obj.rotation.y=Math.PI/2;world.add(obj);vehicles.push({obj,segment:index,speed:4.8+stage*.22});}
+  if(index%5===0&&stage>=2){const obj=makeVehicle('danfo',index%3?'#d94d32':'#e8b51c');obj.position.set(-12.7,0,-index*SEGMENT_LENGTH-7);obj.rotation.y=Math.PI/2;world.add(obj);vehicles.push({obj,segment:index,speed:5.9+stage*.2});}
+  if(index>6&&(index+stage)%7===0)addRoadCrossing(index,-index*SEGMENT_LENGTH);
   if(index%2===0){tree(group,10,-5);box(group,2.5,.6,1.5,'#b79b6d',10,.3,2);}
   if(index>=2){
     const lane=index===2?0:Math.floor(random(index,2)*3)-1;
-    const kind=index===2||random(index,4)<.58?'trader':index%9===0?'eyo':'cart';
+    const kind=index===2||random(index,4)<.52?'trader':index%7===0?'eyo':'cart';
     addBlocker(index,-index*SEGMENT_LENGTH-1,lane,kind);
-    if(index*SEGMENT_LENGTH>=STAGE_LENGTH*2&&index%3===0){const lane2=lane===1?-1:1;addBlocker(index,-index*SEGMENT_LENGTH-1,lane2,'cart');}
+    if(stage>=2||index%3===0){const lane2=lane===1?-1:1;addBlocker(index,-index*SEGMENT_LENGTH-1,lane2,index%5===0?'trader':'cart');}
   }
   const trailLane=index===0?0:Math.floor(random(index,7)*3)-1;
   for(let i=0;i<3;i++){const obj=makeSuya();const z=-index*SEGMENT_LENGTH-5-i*2.7;obj.position.set(trailLane*LANE_WIDTH,.34,z);world.add(obj);collectibles.push({obj,segment:index,z,lane:trailLane,collected:false});}
+  if(index>0&&index%6===0)addMoneyDrop(index,-index*SEGMENT_LENGTH-7,Math.floor(random(index,17)*3)-1);
+  if(index>3&&index%7===0)addWaterHawker(index,-index*SEGMENT_LENGTH-2,Math.floor(random(index,19)*3)-1);
   if(index%4===0){
     const g=new THREE.Group();g.position.set(0,0,0);group.add(g);
     // Shop-front signs stay beside the aisle; nothing spans or blocks the camera.
@@ -334,7 +410,7 @@ function discardRow(index) {
   const group=rows.get(index);if(!group)return;
   group.traverse(obj=>{for(const t of obj.userData.textures||[])t.dispose();if(obj.material?.map)obj.material.dispose();});
   world.remove(group);rows.delete(index);
-  for(const list of [vehicles,traders,collectibles,obstacles])for(let i=list.length-1;i>=0;i--)if(list[i].segment===index){world.remove(list[i].obj);if(list[i].marker){list[i].marker.traverse(o=>{for(const t of o.userData.textures||[])t.dispose();if(o.material?.map)o.material.dispose();});world.remove(list[i].marker);}list.splice(i,1);}
+  for(const list of [vehicles,traders,collectibles,moneyDrops,waterHawkers,obstacles])for(let i=list.length-1;i>=0;i--)if(list[i].segment===index){world.remove(list[i].obj);if(list[i].marker){list[i].marker.traverse(o=>{for(const t of o.userData.textures||[])t.dispose();if(o.material?.map)o.material.dispose();});world.remove(list[i].marker);}list.splice(i,1);}
   for(let i=shopkeepers.length-1;i>=0;i--)if(shopkeepers[i].segment===index)shopkeepers.splice(i,1);
 }
 function ensureWorld() {
@@ -344,17 +420,18 @@ function ensureWorld() {
 }
 
 function refreshHUD() {
-  $('#distance-value').textContent=Math.floor(state.distance);$('#suya-value').textContent=state.suya;
+  $('#distance-value').textContent=Math.floor(state.distance);$('#suya-value').textContent=state.suya;$('#money-value').textContent=state.money;$('#water-value').textContent=state.water;
   $('#market-value').textContent=MARKETS[state.market][0];$('#stage-value').textContent=`${String(state.market+1).padStart(2,'0')} / 19`;
   $('#best-value').textContent=`${state.best}m`;
   document.querySelectorAll('#market-route li').forEach((li,i)=>li.classList.toggle('current',i===state.market));
   canvas.dataset.distance=state.distance.toFixed(1);canvas.dataset.lane=state.lane;canvas.dataset.screen=state.screen;
-  canvas.dataset.music=soundtrack.running&&soundtrack.enabled?'playing':'paused';canvas.dataset.market=MARKETS[state.market][0];
+  canvas.dataset.music=soundtrack.running&&soundtrack.enabled?'playing':'paused';canvas.dataset.market=MARKETS[state.market][0];canvas.dataset.money=state.money;canvas.dataset.water=state.water;
   $('#sound-button').style.opacity=soundtrack.enabled?1:.5;
 }
 function startRun() {
   for(const r of [...rows.keys()])discardRow(r);
-  Object.assign(state,{screen:'playing',distance:0,lane:0,suya:0,market:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0});
+  Object.assign(state,{screen:'playing',distance:0,lane:0,suya:0,money:0,water:0,market:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0});
+  lastShout=-99;
   player.position.set(0,0,0);player.rotation.set(0,Math.PI,0);cameraZ=-4;
   ensureWorld();
   for(const id of ['title-overlay','gameover-overlay','pause-overlay','stage-banner'])$('#'+id).classList.add('hidden');
@@ -370,8 +447,8 @@ function move(direction) {
 function finishRun(reason) {
   if(state.screen!=='playing')return;state.screen='gameover';
   state.best=Math.max(state.best,Math.floor(state.distance));localStorage.setItem('lagos-market-run-best-distance',state.best);
-  $('#gameover-title').textContent=reason==='trader'?'Customer, come back!':reason==='Eyo masquerade'?'Give Eyo some space!':'Watch the '+reason+'!';
-  $('#final-distance').textContent=`${Math.floor(state.distance)}m`;$('#final-suya').textContent=state.suya;
+  $('#gameover-title').textContent=reason==='trader'?'Customer, come back!':reason==='Eyo masquerade'?'Eyo is chasing you!':reason==='water hawker'?'The hawker blocked your hustle!':reason==='road traffic'?'Traffic caught you!':'Watch the '+reason+'!';
+  $('#final-distance').textContent=`${Math.floor(state.distance)}m`;$('#final-suya').textContent=state.suya;$('#final-money').textContent=`₦${state.money}`;
   $('#save-message').textContent=signedIn?'Saving your market run…':'Best saved on this device. Sign in for the global board.';
   $('#gameover-overlay').classList.remove('hidden');$('#move-hint').classList.add('hidden');$('#touch-controls').classList.add('hidden');$('#stage-banner').classList.add('hidden');
   player.rotation.z=-.25;soundtrack.effect('crash');setTimeout(()=>{if(state.screen==='gameover'){soundtrack.pause();refreshHUD();}},360);refreshHUD();saveScore();
@@ -386,20 +463,38 @@ function enterMarket() {
   if(next===state.market)return;state.market=next;state.bannerUntil=state.time+2.6;
   $('#stage-name').textContent=MARKETS[next][0];$('#stage-banner').classList.remove('hidden');soundtrack.market=next;soundtrack.effect('stage');
 }
+function throwWater() {
+  if(state.screen!=='playing'||state.water<1)return false;
+  const target=obstacles.filter(o=>o.kind==='Eyo masquerade'&&!o.fleeing).sort((a,b)=>Math.abs(a.obj.position.z-player.position.z)-Math.abs(b.obj.position.z-player.position.z))[0];
+  if(!target||Math.abs(target.obj.position.z-player.position.z)>18)return false;
+  state.water--;target.fleeing=true;target.chasing=false;target.stunned=1.2;target.obj.position.z=-state.distance-1.4;
+  soundtrack.effect('water');shout('EYO DON RUN! WATER NO DEY FEAR YOU!',1);refreshHUD();return true;
+}
+function interact() {
+  if(state.screen!=='playing')return;
+  const hawker=waterHawkers.find(item=>!item.bought&&Math.abs(-item.z-state.distance)<3.4&&Math.abs(item.obj.position.x-player.position.x)<1.1);
+  if(hawker){
+    if(state.money>=WATER_PRICE){state.money-=WATER_PRICE;state.water++;hawker.bought=true;hawker.obj.visible=false;hawker.marker.visible=false;soundtrack.effect('purchase');shout('THANK YOU! PURE WATER FOR YOUR JOURNEY!',1);refreshHUD();}
+    else {soundtrack.effect('warn');shout('CUSTOMER! BRING MONEY FIRST!',1);}
+    return;
+  }
+  throwWater();
+}
 function update(delta) {
   const animated=state.screen==='playing'||state.screen==='ready';
   if(animated) {
     state.time+=delta;
     for(const vehicle of vehicles) {
-      vehicle.obj.position.z-=vehicle.speed*delta;
-      if(vehicle.obj.position.z<-state.distance-65)vehicle.obj.position.z=-state.distance+25;
+      if(vehicle.crossing){vehicle.obj.position.x+=vehicle.speed*delta;if(vehicle.obj.position.x>18)vehicle.obj.position.x=-18;}
+      else {vehicle.obj.position.z-=vehicle.speed*delta;if(vehicle.obj.position.z<-state.distance-65)vehicle.obj.position.z=-state.distance+25;}
       for(const wheel of vehicle.obj.userData.wheels)wheel.rotation.y+=delta*vehicle.speed;
     }
     for(const seller of shopkeepers){seller.obj.userData.joints.rightArm.rotation.z=-.45+Math.sin(state.time*2+seller.phase)*.28;seller.obj.rotation.y=Math.sin(state.time*.8+seller.phase)*.12;}
     for(const c of collectibles)if(!c.collected){c.obj.rotation.y=state.time*.65;c.obj.position.y=.25+Math.sin(state.time*3+c.segment)*.07;}
+    for(const coin of moneyDrops)if(!coin.collected){coin.obj.rotation.y=state.time*1.7;coin.obj.position.y=.3+Math.sin(state.time*4+coin.segment)*.08;}
   }
   if(state.screen==='playing') {
-    state.speed=Math.min(10.6,6.6+state.market*.24+state.distance*.0017);state.distance+=state.speed*delta;
+    state.speed=Math.min(12.8,6.6+state.market*.34+state.distance*.0024);state.distance+=state.speed*delta;
     const oldX=player.position.x;player.position.x=THREE.MathUtils.damp(oldX,state.lane*LANE_WIDTH,13,delta);player.position.z=-state.distance;
     state.stride+=delta*(10.5+Math.min(2.5,(state.speed-6.6)*.5));const gait=Math.sin(state.stride);
     player.position.y=.035+Math.abs(Math.sin(state.stride))*.065;
@@ -411,17 +506,36 @@ function update(delta) {
     enterMarket();ensureWorld();
     for(const trader of traders) {
       const ahead=-trader.z-state.distance;
-      if(ahead<26&&ahead>-3&&!trader.warning){trader.warning=true;trader.marker.visible=true;soundtrack.effect('warn');}
+      if(ahead<26&&ahead>-3&&!trader.warning){trader.warning=true;trader.marker.visible=true;soundtrack.effect('warn');const lines=trader.obj.userData.goods==='clothes'?['FINE ANKARA! OYA COME!','CUSTOMER, HOLD THIS CLOTH!']:trader.obj.userData.goods==='bags'?['FINE BAGS! DON PASS ME!','BUY THIS ONE, CUSTOMER!']:['CUSTOMER! COME AND BUY!','NO LOOKING, BUY SOMETHING!'];shout(lines[trader.segment%lines.length]);}
       if(ahead<21&&ahead>-3)trader.phase=Math.min(1,trader.phase+delta*.75);
+      if(trader.phase>.55&&trader.swerve&&ahead<13)trader.target=THREE.MathUtils.clamp((Math.round(player.position.x/LANE_WIDTH)+(Math.sin(state.time*4+trader.segment)>0?1:-1))*LANE_WIDTH,-LANE_WIDTH,LANE_WIDTH);
       const ease=trader.phase*trader.phase*(3-2*trader.phase);trader.obj.position.x=THREE.MathUtils.lerp(trader.from,trader.target,ease);
       trader.obj.userData.joints.rightArm.rotation.z=-.8+Math.sin(state.time*5)*.25;
+      trader.obj.rotation.z=trader.swerve?.12*Math.sin(state.time*9+trader.segment):0;
       trader.obj.userData.joints.leftLeg.rotation.x=trader.phase<1?Math.sin(state.time*8)*.35:0;
       trader.obj.userData.joints.rightLeg.rotation.x=-trader.obj.userData.joints.leftLeg.rotation.x;
       if(ahead<-3)trader.marker.visible=false;
       if(Math.abs(trader.z-player.position.z)<.66&&Math.abs(trader.obj.position.x-player.position.x)<.58){finishRun('trader');break;}
     }
-    if(state.screen==='playing')for(const o of obstacles)if(Math.abs(o.z-player.position.z)<o.depth+.25&&Math.abs(o.obj.position.x-player.position.x)<o.width+.22){finishRun(o.kind);break;}
+    if(state.screen==='playing')for(const hawker of waterHawkers){
+      const ahead=-hawker.z-state.distance;
+      if(hawker.bought)continue;
+      if(ahead<30&&ahead>-3&&!hawker.warning){hawker.warning=true;hawker.marker.visible=true;soundtrack.effect('warn');shout('COME AND BUY PURE WATER! CARRY AM!',1.6);}
+      if(ahead<20&&ahead>-3)hawker.phase=Math.min(1,hawker.phase+delta*.9);
+      const ease=hawker.phase*hawker.phase*(3-2*hawker.phase);hawker.obj.position.x=THREE.MathUtils.lerp(hawker.from,hawker.target,ease);hawker.obj.userData.joints.rightArm.rotation.z=-.7+Math.sin(state.time*7)*.28;
+      if(ahead<-3)hawker.marker.visible=false;
+      if(Math.abs(hawker.z-player.position.z)<.72&&Math.abs(hawker.obj.position.x-player.position.x)<.62){finishRun('water hawker');break;}
+    }
+    if(state.screen==='playing')for(const o of obstacles)if(o.kind==='Eyo masquerade'){
+      const ahead=-o.obj.position.z-state.distance;
+      if(o.fleeing){o.obj.position.z-=delta*(10+state.market*.3);o.z=o.obj.position.z;continue;}
+      if(ahead<23&&ahead>-5&&!o.chasing){o.chasing=true;soundtrack.effect('eyo');shout('EYO DEY CHASE YOU! RUN!',1.4);}
+      if(o.chasing&&!o.stunned){o.obj.position.z+=delta*(5.2+state.market*.3);o.obj.position.x=THREE.MathUtils.damp(o.obj.position.x,player.position.x,5,delta);o.obj.rotation.z=Math.sin(state.time*10)*.12;o.obj.userData.scare.arms.forEach((arm,i)=>arm.rotation.z=(i?-1:1)*(.95+Math.sin(state.time*12)*.25));o.z=o.obj.position.z;}
+      if(o.stunned){o.stunned-=delta;o.obj.position.z-=delta*12;o.z=o.obj.position.z;if(o.stunned<=0)o.fleeing=true;}
+    }
+    if(state.screen==='playing')for(const o of obstacles)if(!o.fleeing&&Math.abs(o.obj.position.z-player.position.z)<o.depth+.25&&Math.abs(o.obj.position.x-player.position.x)<o.width+.22){finishRun(o.kind);break;}
     if(state.screen==='playing')for(const c of collectibles)if(!c.collected&&Math.abs(c.z-player.position.z)<.65&&Math.abs(c.obj.position.x-player.position.x)<.65){c.collected=true;c.obj.visible=false;state.suya++;soundtrack.effect('collect');refreshHUD();}
+    if(state.screen==='playing')for(const coin of moneyDrops)if(!coin.collected&&Math.abs(coin.z-player.position.z)<.68&&Math.abs(coin.obj.position.x-player.position.x)<.68){coin.collected=true;coin.obj.visible=false;state.money+=coin.value;soundtrack.effect('money');shout('NA MONEY! HOLD AM WELL!',1);refreshHUD();}
     if(state.distance>24)$('#move-hint').classList.add('hidden');
     if(Math.floor(state.distance)!==lastHud){lastHud=Math.floor(state.distance);refreshHUD();}
     if(state.bannerUntil&&state.time>state.bannerUntil){$('#stage-banner').classList.add('hidden');state.bannerUntil=0;}
@@ -467,7 +581,7 @@ async function loadIdentity() {
 }
 async function saveScore() {
   if(!signedIn)return;
-  const result=await askStartNg({type:'startng:score',stats:{distance:Math.floor(state.distance),lanterns:state.suya}},'startng:scoreSaved');
+  const result=await askStartNg({type:'startng:score',stats:{distance:Math.floor(state.distance),lanterns:state.suya,money:state.money}},'startng:scoreSaved');
   $('#save-message').textContent=result?.ok?`Best run saved. You're #${result.result?.rank??'—'} on the board.`:'Run saved on this device. The global board is unavailable.';
 }
 async function loadLeaderboard() {
@@ -483,6 +597,7 @@ window.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
   const key=event.key.length===1?event.key.toLowerCase():event.key;
   if(keyMap[key]){event.preventDefault();if(!event.repeat)move(keyMap[key]);}
+  else if(key===' '||key==='e'){event.preventDefault();if(!event.repeat)interact();}
   else if(key==='p'||key==='Escape'){event.preventDefault();togglePause();}
   else if(key==='Enter'&&(state.screen==='ready'||state.screen==='gameover'))startRun();
 },{capture:true});
@@ -502,6 +617,7 @@ canvas.addEventListener('pointerup',event=>{
 });
 canvas.addEventListener('pointercancel',()=>{pointerStart=null;});
 for(const b of document.querySelectorAll('[data-move]'))b.addEventListener('pointerdown',event=>{event.preventDefault();move(b.dataset.move);});
+for(const b of document.querySelectorAll('[data-action="interact"]'))b.addEventListener('pointerdown',event=>{event.preventDefault();interact();});
 $('#start-button').onclick=startRun;$('#restart-button').onclick=startRun;$('#pause-button').onclick=togglePause;$('#resume-button').onclick=togglePause;
 $('#home-button').onclick=()=>{state.screen='ready';soundtrack.pause();player.rotation.set(0,0,0);$('#gameover-overlay').classList.add('hidden');$('#title-overlay').classList.remove('hidden');refreshHUD();};
 $('#sign-in-button').onclick=()=>{location.href=`${START_NG}/?return_to=${encodeURIComponent(location.origin+location.pathname)}`;};

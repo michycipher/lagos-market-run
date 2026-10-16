@@ -89,9 +89,21 @@ export class MarketAudio {
     if(kind==='footstep'){this.noise(t,.045,.07,350,this.foot++%2?.25:-.25,this.effects);this.note(85,t,.04,.05,'triangle',this.effects);}
     if(kind==='dodge')this.noise(t,.09,.055,1900,0,this.effects);
     if(kind==='collect')for(let i=0;i<3;i++)this.note([659,784,1046][i],t+i*.055,.14,.15,'sine',this.effects);
+    if(kind==='money')for(let i=0;i<4;i++)this.note([523,659,784,1046][i],t+i*.045,.16,.12,'triangle',this.effects);
+    if(kind==='purchase'){this.note(392,t,.12,.12,'sine',this.effects);this.note(523,t+.1,.18,.14,'sine',this.effects);this.noise(t,.08,.08,2400,0,this.effects);}
+    if(kind==='water'){this.noise(t,.16,.16,900,0,this.effects);this.note(180,t,.32,.18,'sawtooth',this.effects);this.note(92,t+.12,.38,.15,'triangle',this.effects);}
     if(kind==='warn'){this.note(760,t,.07,.11,'triangle',this.effects);this.note(620,t+.1,.08,.09,'triangle',this.effects);}
+    if(kind==='eyo'){this.note(92,t,.42,.22,'sawtooth',this.effects);this.note(58,t+.16,.5,.18,'triangle',this.effects);this.noise(t,.34,.12,260,0,this.effects);}
     if(kind==='crash'){this.noise(t,.25,.22,160,0,this.effects);this.note(95,t,.3,.2,'triangle',this.effects);}
     if(kind==='stage')for(let i=0;i<4;i++)this.note([523,659,784,1046][i],t+i*.09,.22,.14,'triangle',this.effects);
+  }
+  voice(text,{rate=1.08,pitch=1.02}={}) {
+    if(!this.enabled)return;
+    const synth=globalThis.speechSynthesis,Utterance=globalThis.SpeechSynthesisUtterance;
+    if(!synth||!Utterance)return;
+    try {
+      synth.cancel();const line=new Utterance(text);line.volume=1;line.rate=rate;line.pitch=pitch;synth.speak(line);
+    } catch { /* Some embedded browsers expose speech synthesis but reject it. */ }
   }
   horn(level=.2) {
     if(!this.enabled||!this.context)return;const t=this.context.currentTime;
