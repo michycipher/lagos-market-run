@@ -21,28 +21,32 @@
         </div>
       </header>
 
-      <section class="game-layout" aria-label="Neon Market Dash game">
+      <section class="game-layout" aria-label="Lagos Market Dash game">
         <div class="game-column">
           <div class="game-frame">
             <canvas id="game-canvas" width="960" height="540" tabindex="0" aria-label="Lagos Market Dash playfield"></canvas>
             <div class="game-overlay" id="title-overlay">
               <div class="eyebrow">LAGOS · LAST BUS HOME</div>
               <h1>Beat the rush<br /><span>before the market closes.</span></h1>
-              <p>Dodge danfos. Grab suya lanterns. Keep your street cred.</p>
+              <p>Dodge danfos and Eyo masquerades. Grab smoky suya on the run.</p>
               <button class="primary-button" id="start-button" type="button">Start run <span>→</span></button>
-              <div class="control-hint"><kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> · tap the lane buttons below</div>
+              <div class="control-hint"><kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> · move your mouse across the road</div>
             </div>
             <div class="game-overlay hidden" id="gameover-overlay">
               <div class="eyebrow">SHIFT COMPLETE</div>
               <h2 id="gameover-title">The market wins this round.</h2>
               <div class="result-grid">
                 <div><span>Distance</span><strong id="final-distance">0m</strong></div>
-                <div><span>Lanterns</span><strong id="final-lanterns">0</strong></div>
+                <div><span>Suya</span><strong id="final-lanterns">0</strong></div>
               </div>
               <p id="save-message">Your best run is saved locally. Sign in to enter the global board.</p>
               <button class="primary-button" id="restart-button" type="button">Run it back <span>↗</span></button>
             </div>
             <div class="pause-badge hidden" id="pause-badge">Paused · press P to resume</div>
+            <div class="stage-banner hidden" id="stage-banner" aria-live="polite">
+              <span class="stage-kicker">NEXT STOP</span>
+              <strong id="stage-name">Mushin Market</strong>
+            </div>
           </div>
 
           <div class="mobile-controls" aria-label="Movement controls">
@@ -53,7 +57,8 @@
 
           <div class="stats-strip" aria-label="Current run stats">
             <div><span class="stat-label">Distance</span><strong id="distance-value">0m</strong></div>
-            <div><span class="stat-label">Lanterns</span><strong id="lantern-value">0</strong></div>
+            <div><span class="stat-label">Suya</span><strong id="lantern-value">0</strong></div>
+            <div><span class="stat-label">Market stage</span><strong id="stage-value">Balogun</strong></div>
             <div><span class="stat-label">Best</span><strong id="best-value">0m</strong></div>
             <div class="status-chip"><span class="live-dot"></span><span id="run-status">Ready when you are</span></div>
           </div>
@@ -68,9 +73,14 @@
 
           <div class="how-to-card">
             <div class="card-heading"><span>HOW TO PLAY</span><span class="spark">✦</span></div>
-            <div class="how-row"><span class="how-icon move-icon">↔</span><p><strong>Switch lanes</strong><br />Dodge danfos and handcarts.</p></div>
-            <div class="how-row"><span class="how-icon collect-icon">✦</span><p><strong>Collect suya lamps</strong><br />Each one adds to your run.</p></div>
-            <div class="how-row"><span class="how-icon speed-icon">↗</span><p><strong>Beat the rush</strong><br />The street gets faster.</p></div>
+            <div class="how-row"><span class="how-icon move-icon">↔</span><p><strong>Switch lanes</strong><br />Use keys, buttons, or mouse movement.</p></div>
+            <div class="how-row"><span class="how-icon collect-icon">✦</span><p><strong>Collect smoky suya</strong><br />Grab the pepper-dusted skewers.</p></div>
+            <div class="how-row"><span class="how-icon speed-icon">↗</span><p><strong>Beat the rush</strong><br />The street gets faster every market.</p></div>
+          </div>
+
+          <div class="route-card">
+            <div class="card-heading"><span>LAGOS MARKET ROUTE</span><span class="spark">✦</span></div>
+            <ol class="market-route" id="market-route" aria-label="Lagos market stages"></ol>
           </div>
 
           <div class="board-card" id="board-card">
