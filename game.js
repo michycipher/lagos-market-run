@@ -1,27 +1,38 @@
 import * as THREE from './vendor/three.module.js';
+import { MarketAudio } from './market-audio.js';
 
 const START_NG = 'https://start.ng';
 const API = 'https://api.start.ng';
 const GAME_NAME = location.hostname.endsWith('.start.ng') ? location.hostname.split('.')[0] : 'lagos-market-run';
 const $ = (selector) => document.querySelector(selector);
 const MARKETS = [
-  ['Balogun Market','ANKARA & LACE','#d45532'],['Mushin Market','SPARES & SUYA','#1d8d78'],
-  ['Yaba Market','TECH & THRIFT','#336dba'],['Tejuosho Market','FASHION STOP','#a251a0'],
-  ['Oyingbo Market','FRESH FOOD','#d57329'],['Oshodi Market','BUS STOP HUSTLE','#238d72'],
-  ['Mile 12 Market','PEPPER & PLANTAIN','#c44e2f'],['Computer Village','PHONES & GADGETS','#297b9a'],
-  ['Ladipo Market','MOTOR PARTS','#bd792c'],['Alaba International','ELECTRONICS','#2c907b'],
-  ['Idumota Market','WHOLESALE','#934c80'],['Jankara Market','ADIRE & SPICES','#bd6b30'],
-  ['Epe Fish Market','FRESH SEAFOOD','#327da1'],['Ajah Market','COASTAL HUSTLE','#de7540'],
-  ['Ikotun Market','PROVISIONS','#42835c'],['Igando Market','GRAINS & CLOTH','#a9613b'],
-  ['Lekki Market','ART & CRAFT','#218b86'],['Agbalata Market','BADAGRY BASKETS','#cf7a36'],
-  ['Sangotedo Market','LAST STOP, MORE SUYA','#a76135']
+  ['Balogun Market','ANKARA, SHOES & BAGS','#d45532',['clothes','shoes','bags','clothes']],
+  ['Mushin Market','FOODSTUFF & PROVISIONS','#1d8d78',['onions','meat','grains','tomatoes']],
+  ['Yaba Market','OKRIKA & SNEAKERS','#336dba',['clothes','shoes','books','bags']],
+  ['Tejuosho Market','FASHION & FABRICS','#a251a0',['clothes','bags','shoes','clothes']],
+  ['Oyingbo Market','FOODSTUFF & FRESH FISH','#d57329',['meat','fish','grains','onions']],
+  ['Oshodi Market','CLOTHES & EVERYDAY FINDS','#238d72',['shoes','clothes','bags','tomatoes']],
+  ['Mile 12 Market','TOMATOES, PEPPER & ONIONS','#c44e2f',['tomatoes','peppers','onions','yam']],
+  ['Computer Village','PHONES & GADGETS','#297b9a',['phones','laptops','phones','speakers']],
+  ['Ladipo Market','MOTOR SPARE PARTS','#bd792c',['tyres','engines','batteries','tyres']],
+  ['Alaba International','ELECTRONICS & APPLIANCES','#2c907b',['televisions','speakers','laptops','televisions']],
+  ['Idumota Market','TEXTILES & WHOLESALE','#934c80',['clothes','bags','provisions','shoes']],
+  ['Jankara Market','ADIRE, HERBS & BEADS','#bd6b30',['clothes','herbs','beads','herbs']],
+  ['Epe Fish Market','FRESH & SMOKED FISH','#327da1',['fish','fish','crabs','fish']],
+  ['Ajah Market','FRESH FOOD & PROVISIONS','#de7540',['tomatoes','onions','provisions','meat']],
+  ['Ikotun Market','PROVISIONS & HOUSEHOLD','#42835c',['provisions','grains','clothes','onions']],
+  ['Igando Market','GRAINS & FRESH PRODUCE','#a9613b',['grains','yam','peppers','tomatoes']],
+  ['Lekki Market','ART, CRAFTS & BEADS','#218b86',['art','baskets','beads','art']],
+  ['Agbalata Market','BADAGRY FOOD & BASKETS','#cf7a36',['fish','grains','baskets','yam']],
+  ['Sangotedo Market','FRESH FOOD & SUYA','#a76135',['meat','peppers','provisions','onions']]
 ];
-const STEP_X = 1.55, STEP_Z = 2.4, BOUND = 6;
-const state = { screen:'ready', row:0, column:0, furthest:0, hops:0, suya:0, market:0, time:0,
-  hop:null, queued:null, pointerTarget:null, bannerUntil:0, best:Number(localStorage.getItem('lagos-market-run-best-3d') || 0) };
-let identity = { name:'Guest', style:{} }, signedIn = false, soundOn = true, audio;
-let framePromise, player, limbs, cameraZ=6, previousTime=0;
-const rows = new Map(), vehicles = [], walkers = [], collectibles = [], obstacles = [];
+const LANE_WIDTH=2.25, SEGMENT_LENGTH=16, STAGE_LENGTH=250;
+const state={screen:'ready',distance:0,lane:0,suya:0,market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,
+  best:Number(localStorage.getItem('lagos-market-run-best-distance')||0)};
+let identity={name:'Guest',style:{}},signedIn=false;
+const soundtrack=new MarketAudio();
+let framePromise,player,limbs,cameraZ=4,previousTime=0,lastHud=-1;
+const rows=new Map(),vehicles=[],traders=[],collectibles=[],obstacles=[],shopkeepers=[];
 const materialCache = new Map(), geometryCache = new Map();
 const canvas = $('#game-canvas');
 let renderer;
@@ -78,7 +89,7 @@ function createCharacter(style={}, scale=1) {
   cylinder(body,.13,.17,.17,skin,0,1.47,0);
   sphere(body,.28,skin,0,1.73,0,.88,1.07,.9);
   sphere(body,.065,skin,-.25,1.73,0);sphere(body,.065,skin,.25,1.73,0);
-  // Face looks toward local +Z; rotation follows each hop.
+  // Face looks toward local +Z; the runner faces down the market aisle.
   sphere(body,.025,'#211a15',-.087,1.77,.232);sphere(body,.025,'#211a15',.087,1.77,.232);
   sphere(body,.045,skin,0,1.7,.255,.8,.7,1);
   const mouth=box(body,.09,.013,.015,'#7c3d24',0,1.63,.241);
@@ -174,179 +185,256 @@ function barrel(parent,x,z) {
   cylinder(parent,.41,.41,.09,'#226c87',x,.17,z,12);cylinder(parent,.41,.41,.09,'#226c87',x,.78,z,12);
   cylinder(parent,.29,.29,.035,'#194b5d',x,1,z,12);
 }
-function stall(parent,x,z,index) {
-  const g=new THREE.Group();g.position.set(x,0,z);parent.add(g);
-  const market=MARKETS[Math.min(18,Math.floor(Math.max(0,index)/20))],accent=market[2];
-  for(const px of [-1.2,1.2])for(const pz of [-.65,.65])box(g,.09,2.35,.09,'#695034',px,1.18,pz);
-  const roof=box(g,2.9,.15,1.95,accent,0,2.45,0);roof.rotation.x=-.11;
-  for(let i=0;i<5;i++)box(g,.23,.16,1.95,'#f7c96c',-1.25+i*.57,2.51,0);
-  box(g,2.65,.12,1.6,'#895637',0,1.02,0);box(g,2.5,.85,1.32,'#9a653c',0,.53,0);
-  const label=index%8===0?'MAMA PUT':index%4===0?'SUYA SPOT':market[1];sign(g,label,0,1.87,.77,2.35);
-  for(let i=0;i<6;i++)sphere(g,.13,i%2?'#d84526':'#7d9a3b',-.95+i*.37,1.17,.12,1,.7,1);
-}
 function tree(parent,x,z) {
   cylinder(parent,.1,.15,2,'#785333',x,1,z,7);sphere(parent,1,'#63833b',x,2.5,z,1,.8,1);
   sphere(parent,.7,'#7c9647',x+.4,2.85,z-.2);
 }
-function safeRow(index) { return index<=1 || index%5===0 || index%5===1; }
 function random(index,salt=0) { const v=Math.sin(index*127.1+salt*311.7+42.3)*43758.5453;return v-Math.floor(v); }
-
-function addRow(index) {
-  const group=new THREE.Group();group.position.z=-index*STEP_Z;group.userData.index=index;world.add(group);rows.set(index,group);
-  const safe=safeRow(index), z=-index*STEP_Z;
-  const floor=box(group,120,.18,STEP_Z+.01,safe?(index%2?'#c56636':'#bf592e'):'#49483e',0,-.1,0);floor.castShadow=false;
-  if(!safe) {
-    for(let x=-29;x<=29;x+=3.8){const dash=box(group,1.65,.018,.065,'#fff0c8',x,.004,0);dash.castShadow=false;}
-    const direction=index%2?1:-1,kind=index%4===0?'keke':index%3===0?'okada':'danfo';
-    const speed=(2.2+random(index,4)*1.5)*(1+Math.min(18,Math.floor(index/20))*.07);
-    const count=index<8?2:3;
-    for(let v=0;v<count;v++) {
-      const obj=makeVehicle(kind,kind==='danfo'?'#edb91c':v%2?'#258c48':'#237cb0');
-      obj.position.set(-25+v*(50/count)+random(index,7)*5,0,z);obj.rotation.y=direction<0?Math.PI:0;world.add(obj);
-      vehicles.push({obj,row:index,direction,speed,length:obj.userData.length});
-    }
-  } else {
-    // Kerbs sit at ground level between actual roads, with clear open walking space.
-    for(const edge of [-1,1]) if(!safeRow(index+edge))box(group,120,.09,.12,'#e6c999',0,.015,edge*-STEP_Z/2);
-    for(const side of [-1,1]) {
-      if(index%5===0){stall(group,side*(12+random(index,3)*2),0,index);tree(group,side*18,.3);}
-      if(index%5===1)barrel(group,side*11,.25);
-    }
-    if(index>5&&index%10===5) {
-      const obj=makeEyo();obj.position.set((random(index,6)-.5)*13,0,z);world.add(obj);walkers.push({obj,row:index,direction:index%2?1:-1,speed:.7+Math.floor(index/20)*.04});
-    }
-    if(index>2&&index%5===1) {
-      const column=(Math.floor(random(index,8)*9)-4);barrel(group,column*STEP_X,.1);obstacles.push({row:index,column});
-    }
-    if(index%20===0) {
-      const market=MARKETS[Math.min(18,Math.floor(Math.max(0,index)/20))];
-      box(group,.12,2.8,.12,'#735539',-8,1.4,-.8);box(group,.12,2.8,.12,'#735539',-4,1.4,-.8);
-      sign(group,market[0].toUpperCase(),-6,2.52,-.8,4.5);sign(group,market[1],-6,1.85,-.8,3.25,'#f5e4be');
-    }
+const shopNames={clothes:['MAMA TITI ANKARA','LACE & ASO EBI','BISI TEXTILES'],shoes:['CHIKA SHOES','SNEAKER CORNER'],bags:['BOLA BAGS','LEATHER HOUSE'],
+  onions:['ALHAJA ONIONS'],tomatoes:['FRESH TOMATOES'],peppers:['ATA RODO'],meat:['BABA BUTCHER','SUYA SPOT'],grains:['RICE, BEANS & GARRI'],fish:['EJA TUTU','FRESH FISH'],yam:['YAM DEPOT'],
+  phones:['PHONE PLAZA'],laptops:['LAPTOP REPAIRS'],speakers:['SOUND & SOLAR'],televisions:['TV & ELECTRONICS'],tyres:['TOKUNBO TYRES'],engines:['ENGINE SPARES'],batteries:['BATTERY DEPOT'],
+  books:['BOOKS & MORE'],provisions:['MAMA PUT PROVISIONS'],herbs:['HERBS & SPICES'],beads:['ILEKE BEADS'],art:['WOOD & ADIRE ART'],baskets:['HANDWOVEN BASKETS'],crabs:['FRESH CRABS']};
+function ring(parent,r,t,color,x,y,z) { const obj=mesh(parent,geometry(`torus:${r},${t}`,()=>new THREE.TorusGeometry(r,t,6,12)),color,x,y,z);return obj; }
+function basket(parent,x,y,z,type='tomatoes') {
+  const g=new THREE.Group();g.position.set(x,y,z);parent.add(g);
+  cylinder(g,.48,.36,.38,'#9e6d3d',0,.19,0,10);
+  for(let band=0;band<3;band++){const r=ring(g,.4+band*.022,.022,'#d2a362',0,.09+band*.13,0);r.rotation.x=Math.PI/2;}
+  if(type==='grains') {cylinder(g,.46,.4,.1,'#e0c890',0,.41,0,12);for(let i=0;i<7;i++)sphere(g,.07,'#e8d6ab',Math.cos(i*2.4)*.27,.46,Math.sin(i*2.4)*.27,1,.35,1);return;}
+  const color=type==='onions'?'#b66e91':type==='peppers'?'#da3825':type==='herbs'?'#518b35':'#dc4b2e';
+  for(let i=0;i<9;i++){const a=i*2.4,px=Math.cos(a)*.27,pz=Math.sin(a)*.27,py=.4+(i>5?.13:0);
+    const produce=sphere(g,.14,color,px,py,pz,type==='peppers'?.55:1,type==='peppers'?1.6:.92,type==='peppers'?.55:1);
+    if(type==='peppers')produce.rotation.z=.8;
+    cylinder(g,.015,.023,.07,type==='onions'?'#dbc49b':'#36733b',px,py+.13,pz,5);
   }
-  if(index>=1&&index%2===1) {
-    const column=index===1?0:Math.floor(random(index,2)*9)-4;
-    if(!obstacles.some(o=>o.row===index&&o.column===column)) {
-      const obj=makeSuya();obj.position.set(column*STEP_X,.3,z);world.add(obj);collectibles.push({obj,row:index,column,collected:false});
-    }
+}
+function shirt(parent,x,y,z,color,pattern=false) {
+  box(parent,.44,.55,.1,color,x,y,z);for(const side of [-1,1]){const sleeve=box(parent,.22,.22,.11,color,x+side*.27,y+.15,z);sleeve.rotation.z=side*.45;}
+  cylinder(parent,.07,.07,.05,'#e8d1a7',x,y+.29,z,8);
+  if(pattern)for(let i=0;i<6;i++)box(parent,.055,.06,.015,i%2?'#edc84f':'#234d58',x-.13+(i%3)*.13,y-.12+Math.floor(i/3)*.18,z+.06);
+}
+function merchandise(parent,type,variant=0) {
+  const g=new THREE.Group();parent.add(g);g.userData.goods=type;
+  const colours=['#d24f35','#236e87','#dea62a','#4c916c','#9c4c9a','#ede0b6'];
+  if(type==='clothes') {
+    for(const x of [-1.1,1.1]){cylinder(g,.035,.035,2,'#6a6458',x,1.1,.65);box(g,.38,.05,.38,'#6a6458',x,.1,.65);}
+    const rail=cylinder(g,.035,.035,2.3,'#6a6458',0,2.08,.65);rail.rotation.z=Math.PI/2;
+    for(let i=0;i<4;i++){shirt(g,-.84+i*.56,1.58,.68,colours[(i+variant)%6],true);const hanger=ring(g,.055,.012,'#ae9d83',-.84+i*.56,1.99,.68);}
+    for(let i=0;i<5;i++)cylinder(g,.12,.12,.7,colours[(i+variant)%6],-.85+i*.4,.73,-.22,10);
+  } else if(type==='shoes') {
+    for(let shelf=0;shelf<3;shelf++) {box(g,2.45,.08,.65,'#754c31',0,.45+shelf*.5,.15);
+      for(let i=0;i<4;i++){const x=-.85+i*.57,y=.54+shelf*.5;box(g,.31,.06,.46,'#e5d5b2',x,y,.15);sphere(g,.17,colours[(i+variant+shelf)%6],x,y+.12,.12,.85,.65,1.2);}}
+  } else if(type==='bags') {
+    for(let shelf=0;shelf<2;shelf++){box(g,2.5,.1,.55,'#885333',0,.6+shelf*.78,.2);
+      for(let i=0;i<4;i++){const x=-.88+i*.58,y=.86+shelf*.78;box(g,.4,.42,.21,colours[(i+shelf+variant)%6],x,y,.2);ring(g,.11,.025,'#69452f',x,y+.28,.2);box(g,.055,.06,.02,'#edc653',x,y,.317);}}
+  } else if(['tomatoes','onions','peppers','grains','herbs'].includes(type)) {
+    for(let i=0;i<3;i++)basket(g,-.85+i*.85,.28,.38,type);box(g,2.8,.32,.85,'#895838',0,.2,.38);
+    for(let i=0;i<2;i++)basket(g,-.55+i*1.1,0,1.1,type);
+  } else if(type==='meat') {
+    box(g,2.6,.15,1,'#9c653e',0,.8,.3);box(g,1,.08,.6,'#ddbc83',.6,.92,.3);
+    for(let i=0;i<4;i++)sphere(g,.19,'#9e4b37',-.9+i*.4,1,.3,1.2,.5,1);
+    const rail=box(g,2.5,.06,.06,'#797568',0,2.05,.12);
+    for(let i=0;i<3;i++){cylinder(g,.016,.016,.3,'#888779',-.8+i*.8,1.87,.12);sphere(g,.2,'#ad5c42',-.8+i*.8,1.55,.12,.8,1.6,.9);}
+    const grill=box(g,1.05,.55,.7,'#383a32',-.55,.5,1.1);for(let i=0;i<5;i++)box(g,.04,.035,.7,'#b4a17b',-.95+i*.19,.8,1.1);
+    for(let i=0;i<3;i++)sphere(g,.08,'#d17b36',-.85+i*.3,.84,1.1,1.3,.6,.6);
+  } else if(type==='fish'||type==='crabs') {
+    box(g,2.55,.18,.95,'#87b7b9',0,.72,.3);box(g,2.35,.04,.8,'#e3e3cd',0,.83,.3);
+    for(let i=0;i<5;i++){const x=-.9+i*.45;sphere(g,.16,type==='fish'?'#68888b':'#c06437',x,.96,.28,1.4,.45,.7);
+      if(type==='fish'){const tail=cylinder(g,0,.13,.18,'#68888b',x-.27,.96,.28,3);tail.rotation.z=Math.PI/2;sphere(g,.02,'#222b29',x+.16,1,.34);}
+      else for(const side of [-1,1])for(let j=0;j<2;j++){const leg=box(g,.14,.02,.02,'#b9572f',x+side*.2,.92,.2+j*.16);leg.rotation.y=side*.6;}}
+  } else if(type==='yam') {
+    for(let i=0;i<9;i++){const tuber=sphere(g,.16,'#927043',-.9+(i%5)*.43,.2+Math.floor(i/5)*.22,.4+(i%2)*.2,1,1,2.3);tuber.rotation.x=1.2;}
+  } else if(['phones','laptops','televisions','speakers'].includes(type)) {
+    box(g,2.6,.12,.9,'#6e6755',0,.65,.25);
+    if(type==='speakers'){for(const x of [-.75,.75]){box(g,.6,1.3,.5,'#252c2b',x,1.3,.2);for(const y of [.98,1.54])cylinder(g,.17,.17,.055,'#607077',x,y,.48).rotation.x=Math.PI/2;}}
+    else if(type==='televisions'){box(g,2,1.13,.12,'#202d32',0,1.4,.3);box(g,1.8,.92,.02,'#337e92',0,1.4,.375);box(g,.5,.05,.35,'#2a3334',0,.8,.3);}
+    else for(let i=0;i<4;i++){const x=-.85+i*.57;box(g,.4,type==='phones'?.62:.38,.06,'#252f35',x,1.05,.25);box(g,.33,type==='phones'?.51:.3,.02,'#4aa3b4',x,1.05,.29);if(type==='laptops')box(g,.45,.035,.4,'#8f9da0',x,.85,.46);}
+  } else if(type==='tyres') {
+    for(let i=0;i<4;i++){const tyre=ring(g,.35,.12,'#30322e',-.9+(i%2)*1.05,.5+Math.floor(i/2)*.65,.3);tyre.rotation.y=i*.12;}
+  } else if(type==='engines'||type==='batteries') {
+    box(g,2.5,.15,1,'#745438',0,.6,.25);for(let i=0;i<3;i++){box(g,.55,.5,.45,type==='engines'?'#7c8482':'#323e39',-.8+i*.8,.93,.2);box(g,.36,.08,.28,'#ceab3e',-.8+i*.8,1.22,.2);if(type==='engines')for(let j=0;j<3;j++)cylinder(g,.06,.06,.3,'#b4b6a8',-.96+i*.8+j*.15,1.35,.2);}
+  } else if(type==='beads') {
+    box(g,2.4,.08,.6,'#81573a',0,.7,.25);for(let i=0;i<5;i++){const necklace=ring(g,.19,.045,colours[i],-.95+i*.46,1.2,.3);}
+  } else if(type==='art') {
+    for(let i=0;i<3;i++){const x=-.85+i*.85;box(g,.7,1.2,.08,'#77472c',x,1,.25);box(g,.57,1.04,.02,colours[(i+variant)%6],x,1,.31);sphere(g,.19,'#e3bd69',x,1.15,.34,1,1.7,.08);}
+  } else if(type==='baskets') {
+    for(let i=0;i<5;i++){const x=-.9+(i%3)*.85,z=.2+Math.floor(i/3)*.7;cylinder(g,.32,.23,.54,'#b58a4d',x,.3,z,10);const r=ring(g,.34,.03,'#e0be79',x,.57,z);r.rotation.x=Math.PI/2;}
+  } else {
+    for(let shelf=0;shelf<3;shelf++){box(g,2.5,.08,.5,'#87673d',0,.45+shelf*.45,.2);for(let i=0;i<6;i++)box(g,.28,.34,.25,colours[(i+shelf+variant)%6],-1.05+i*.41,.65+shelf*.45,.2);}
+  }
+  return g;
+}
+function stall(parent,side,z,index,slot) {
+  const g=new THREE.Group();g.position.set(side*6.6,0,z);g.rotation.y=side<0?.58:-.58;parent.add(g);
+  const market=MARKETS[Math.min(18,Math.floor(Math.max(0,index*SEGMENT_LENGTH-z)/STAGE_LENGTH))];
+  const variant=index*2+slot+(side>0?1:0),type=market[3][((variant%4)+4)%4];g.userData.goods=type;
+  const wall=['#b69362','#a96b46','#d6bb87'][Math.abs(variant)%3];
+  box(g,3.5,2.8,.18,wall,0,1.4,-.6);box(g,3.5,.2,2.1,market[2],0,2.9,.2);
+  for(let i=0;i<6;i++){box(g,.25,.08,2.1,'#ecd5a5',-1.5+i*.6,3.02,.2);}
+  for(const x of [-1.65,1.65])box(g,.09,2.8,.09,'#755036',x,1.4,1.05);
+  sign(g,shopNames[type][Math.abs(variant)%shopNames[type].length],0,2.5,1.12,3.3);
+  merchandise(g,type,Math.abs(variant));
+  const keeper=createCharacter({body:variant%2?'female':'male',primaryColor:['#d97735','#1c8d78','#a44768'][Math.abs(variant)%3],secondaryColor:'#454335',hair:variant%2?'bun':'short'},.86);
+  keeper.position.set(1.2,0,.3);g.add(keeper);shopkeepers.push({obj:keeper,segment:index,phase:random(index,slot+3)*6});
+  if(variant%3===0){const umbrella=cylinder(g,0,1.4,.45,market[2],0,3.3,1.5,8);cylinder(g,.035,.035,3.1,'#68523a',0,1.5,1.5);}
+}
+function makeCart(goods='clothes') {
+  const g=new THREE.Group();box(g,1.1,.48,1.15,'#8a5a34',0,.55,0);for(const x of [-.51,.51])for(const z of [-.4,.4]){const w=cylinder(g,.18,.18,.1,'#2f332c',x,.24,z);w.rotation.z=Math.PI/2;}
+  for(let i=0;i<3;i++){box(g,.8,.16,.7,['#d56c37','#3e8994','#d6b65f'][i],0,.86+i*.16,0);}
+  for(const x of [-.45,.45])box(g,.045,.5,.045,'#5f4c38',x,.9,.7);
+  return g;
+}
+function addBlocker(index,z,lane,kind='cart') {
+  const stage=Math.min(18,Math.floor(-z/STAGE_LENGTH));let obj;
+  if(kind==='trader') {
+    const side=lane<0?-1:lane>0?1:index%2?-1:1;
+    obj=createCharacter({body:index%2?'female':'male',primaryColor:index%2?'#ae487a':'#2c8a88',secondaryColor:'#b28b48',hair:index%2?'bun':'short'});
+    const goods=MARKETS[stage][3][index%4];
+    if(goods==='clothes')shirt(obj,0,1.05,.42,'#dc8e33',true);
+    else if(goods==='bags'){box(obj,.5,.35,.25,'#ae693d',0,1,.4);ring(obj,.13,.025,'#69452d',0,1.25,.4);}
+    else {const tray=box(obj,.7,.1,.4,'#b78c51',0,1.04,.37);for(let i=0;i<3;i++)sphere(obj,.09,goods==='onions'?'#b66e91':'#da4a2b',-.2+i*.2,1.15,.37);}
+    obj.position.set(side*4.9,0,z);obj.rotation.y=side<0?Math.PI/2:-Math.PI/2;
+    const marker=new THREE.Group();const light=cylinder(marker,.42,.42,.025,'#edbd39',lane*LANE_WIDTH,.02,z,12);world.add(marker);
+    const call=goods==='clothes'?'FINE ANKARA!':goods==='shoes'?'TRY THESE SHOES!':goods==='bags'?'FINE BAGS!':'CUSTOMER, COME!';
+    sign(marker,call,lane*LANE_WIDTH,2.65,z,2.5,'#fff0cb');marker.visible=false;
+    traders.push({obj,segment:index,z,lane,side,from:side*4.9,target:lane*LANE_WIDTH,phase:0,warning:false,marker});
+  } else if(kind==='eyo') {obj=makeEyo();obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,width:.6,depth:.65,kind:'Eyo masquerade'});}
+  else {obj=makeCart(MARKETS[stage][3][index%4]);obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,width:.65,depth:.75,kind:'stock trolley'});}
+  world.add(obj);return obj;
+}
+function addRow(index) {
+  const group=new THREE.Group();group.position.z=-index*SEGMENT_LENGTH;group.userData.index=index;world.add(group);rows.set(index,group);
+  const market=MARKETS[Math.min(18,Math.floor(Math.max(0,index*SEGMENT_LENGTH)/STAGE_LENGTH))];
+  const ground=box(group,80,.16,SEGMENT_LENGTH+.02,'#b68a57',0,-.12,0);ground.castShadow=false;
+  const aisle=box(group,9,.14,SEGMENT_LENGTH+.02,index%2?'#c47d49':'#ce8751',0,-.07,0);aisle.castShadow=false;
+  // Market paving and shop drainage define a continuous aisle, not road crossings.
+  for(const side of [-1,1]){box(group,.16,.08,SEGMENT_LENGTH,'#8a7658',side*4.5,-.02,0);for(const z of [-6,-2,2,6])box(group,.22,.025,1.1,'#544f42',side*4.5,.03,z);}
+  for(let z=-7;z<8;z+=2){const joint=box(group,8.7,.008,.025,'#b97a49',0,.008,z);joint.castShadow=false;}
+  for(const side of [-1,1])for(let slot=0;slot<2;slot++)stall(group,side,-4+slot*8,index,slot);
+  // Service road runs beside the shops. Vehicles never drive through the runner's aisle.
+  box(group,4.2,.1,SEGMENT_LENGTH+.02,'#55534a',-12.7,-.04,0);box(group,.2,.12,SEGMENT_LENGTH,'#dec495',-10.5,.02,0);
+  for(const z of [-6,0,6])box(group,.06,.018,2,'#e8d6ac',-12.7,.02,z);
+  if(index%3===0){const obj=makeVehicle(index%2?'keke':'danfo',index%2?'#228f5b':'#edb91c');obj.position.set(-12.7,0,-index*SEGMENT_LENGTH);obj.rotation.y=Math.PI/2;world.add(obj);vehicles.push({obj,segment:index,speed:4.8});}
+  if(index%2===0){tree(group,10,-5);box(group,2.5,.6,1.5,'#b79b6d',10,.3,2);}
+  if(index>=2){
+    const lane=index===2?0:Math.floor(random(index,2)*3)-1;
+    const kind=index===2||random(index,4)<.58?'trader':index%9===0?'eyo':'cart';
+    addBlocker(index,-index*SEGMENT_LENGTH-1,lane,kind);
+    if(index*SEGMENT_LENGTH>=STAGE_LENGTH*2&&index%3===0){const lane2=lane===1?-1:1;addBlocker(index,-index*SEGMENT_LENGTH-1,lane2,'cart');}
+  }
+  const trailLane=index===0?0:Math.floor(random(index,7)*3)-1;
+  for(let i=0;i<3;i++){const obj=makeSuya();const z=-index*SEGMENT_LENGTH-5-i*2.7;obj.position.set(trailLane*LANE_WIDTH,.34,z);world.add(obj);collectibles.push({obj,segment:index,z,lane:trailLane,collected:false});}
+  if(index%4===0){
+    const g=new THREE.Group();g.position.set(0,0,0);group.add(g);
+    // Shop-front signs stay beside the aisle; nothing spans or blocks the camera.
+    box(g,.09,3.3,.09,'#6a5338',-4.7,1.65,4);
+    const label=sign(g,market[0].toUpperCase(),-4.7,3.25,4,3.3);label.rotation.y=.3;
   }
 }
 function discardRow(index) {
   const group=rows.get(index);if(!group)return;
   group.traverse(obj=>{for(const t of obj.userData.textures||[])t.dispose();if(obj.material?.map)obj.material.dispose();});
   world.remove(group);rows.delete(index);
-  for(const list of [vehicles,walkers,collectibles])for(let i=list.length-1;i>=0;i--)if(list[i].row===index){world.remove(list[i].obj);list.splice(i,1);}
-  for(let i=obstacles.length-1;i>=0;i--)if(obstacles[i].row===index)obstacles.splice(i,1);
+  for(const list of [vehicles,traders,collectibles,obstacles])for(let i=list.length-1;i>=0;i--)if(list[i].segment===index){world.remove(list[i].obj);if(list[i].marker){list[i].marker.traverse(o=>{for(const t of o.userData.textures||[])t.dispose();if(o.material?.map)o.material.dispose();});world.remove(list[i].marker);}list.splice(i,1);}
+  for(let i=shopkeepers.length-1;i>=0;i--)if(shopkeepers[i].segment===index)shopkeepers.splice(i,1);
 }
 function ensureWorld() {
-  for(let r=Math.max(-4,state.furthest-7);r<=state.furthest+20;r++)if(!rows.has(r))addRow(r);
-  for(const r of rows.keys())if(r<state.furthest-7)discardRow(r);
+  const segment=Math.floor(state.distance/SEGMENT_LENGTH);
+  for(let r=Math.max(-2,segment-2);r<=segment+5;r++)if(!rows.has(r))addRow(r);
+  for(const r of rows.keys())if(r<segment-2)discardRow(r);
 }
 
-function playTone(frequency=430,length=.065) {
-  if(!soundOn)return;
-  try {audio??=new AudioContext();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.setValueAtTime(frequency,audio.currentTime);o.frequency.exponentialRampToValueAtTime(frequency*.72,audio.currentTime+length);g.gain.setValueAtTime(.035,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+length);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+length);}catch{/* Audio is optional. */}
-}
 function refreshHUD() {
-  $('#hops-value').textContent=state.hops;$('#suya-value').textContent=state.suya;
+  $('#distance-value').textContent=Math.floor(state.distance);$('#suya-value').textContent=state.suya;
   $('#market-value').textContent=MARKETS[state.market][0];$('#stage-value').textContent=`${String(state.market+1).padStart(2,'0')} / 19`;
-  $('#best-value').textContent=`${state.best} hops`;
+  $('#best-value').textContent=`${state.best}m`;
   document.querySelectorAll('#market-route li').forEach((li,i)=>li.classList.toggle('current',i===state.market));
-  // These canvas attributes also make current movement and score inspectable to assistive tools.
-  canvas.dataset.row=state.row;canvas.dataset.column=state.column;canvas.dataset.screen=state.screen;
+  canvas.dataset.distance=state.distance.toFixed(1);canvas.dataset.lane=state.lane;canvas.dataset.screen=state.screen;
+  canvas.dataset.music=soundtrack.running&&soundtrack.enabled?'playing':'paused';canvas.dataset.market=MARKETS[state.market][0];
+  $('#sound-button').style.opacity=soundtrack.enabled?1:.5;
 }
 function startRun() {
   for(const r of [...rows.keys()])discardRow(r);
-  Object.assign(state,{screen:'playing',row:0,column:0,furthest:0,hops:0,suya:0,market:0,hop:null,queued:null,pointerTarget:null,bannerUntil:0});
-  player.position.set(0,0,0);player.rotation.set(0,Math.PI,0);cameraZ=-1;
+  Object.assign(state,{screen:'playing',distance:0,lane:0,suya:0,market:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0});
+  player.position.set(0,0,0);player.rotation.set(0,Math.PI,0);cameraZ=-4;
   ensureWorld();
   for(const id of ['title-overlay','gameover-overlay','pause-overlay','stage-banner'])$('#'+id).classList.add('hidden');
   $('#move-hint').classList.remove('hidden');$('#touch-controls').classList.remove('hidden');
   $('#pause-button').textContent='Ⅱ';$('#pause-button').setAttribute('aria-label','Pause game');
-  refreshHUD();canvas.focus();playTone();
+  soundtrack.start(0);refreshHUD();canvas.focus();
 }
 function move(direction) {
   if(state.screen!=='playing')return;
-  if(state.hop){state.queued=direction;return;}
-  const dx=direction==='left'?-1:direction==='right'?1:0,drow=direction==='up'?1:direction==='down'?-1:0;
-  const column=state.column+dx,row=state.row+drow;
-  if(column<-BOUND||column>BOUND||row<Math.max(0,state.furthest-5)||obstacles.some(o=>o.row===row&&o.column===column)) {playTone(160);state.pointerTarget=null;return;}
-  state.hop={from:player.position.clone(),to:new THREE.Vector3(column*STEP_X,0,-row*STEP_Z),time:0,duration:drow?.23:.19,row,column};
-  player.rotation.y=dx>0?Math.PI/2:dx<0?-Math.PI/2:drow>0?Math.PI:0;
-  playTone(350+random(row,column)*110);
+  const lane=THREE.MathUtils.clamp(state.lane+(direction==='left'?-1:1),-1,1);
+  if(lane!==state.lane){state.lane=lane;soundtrack.effect('dodge');refreshHUD();}
 }
 function finishRun(reason) {
-  if(state.screen!=='playing')return;state.screen='gameover';state.hop=null;state.queued=null;state.pointerTarget=null;
-  state.best=Math.max(state.best,state.hops);localStorage.setItem('lagos-market-run-best-3d',state.best);
-  $('#gameover-title').textContent=reason==='eyo'?'Give Eyo some space!':'Mind the '+reason+'!';
-  $('#final-hops').textContent=state.hops;$('#final-suya').textContent=state.suya;
+  if(state.screen!=='playing')return;state.screen='gameover';
+  state.best=Math.max(state.best,Math.floor(state.distance));localStorage.setItem('lagos-market-run-best-distance',state.best);
+  $('#gameover-title').textContent=reason==='trader'?'Customer, come back!':reason==='Eyo masquerade'?'Give Eyo some space!':'Watch the '+reason+'!';
+  $('#final-distance').textContent=`${Math.floor(state.distance)}m`;$('#final-suya').textContent=state.suya;
   $('#save-message').textContent=signedIn?'Saving your market run…':'Best saved on this device. Sign in for the global board.';
   $('#gameover-overlay').classList.remove('hidden');$('#move-hint').classList.add('hidden');$('#touch-controls').classList.add('hidden');$('#stage-banner').classList.add('hidden');
-  player.rotation.z=-.35;playTone(120,.25);refreshHUD();saveScore();
+  player.rotation.z=-.25;soundtrack.effect('crash');setTimeout(()=>{if(state.screen==='gameover'){soundtrack.pause();refreshHUD();}},360);refreshHUD();saveScore();
 }
 function togglePause() {
-  if(state.screen==='playing'){state.screen='paused';$('#pause-overlay').classList.remove('hidden');$('#pause-button').setAttribute('aria-label','Resume game');$('#pause-button').textContent='▶';}
-  else if(state.screen==='paused'){state.screen='playing';$('#pause-overlay').classList.add('hidden');$('#pause-button').setAttribute('aria-label','Pause game');$('#pause-button').textContent='Ⅱ';canvas.focus();}
+  if(state.screen==='playing'){state.screen='paused';soundtrack.pause();$('#pause-overlay').classList.remove('hidden');$('#pause-button').setAttribute('aria-label','Resume game');$('#pause-button').textContent='▶';}
+  else if(state.screen==='paused'){state.screen='playing';soundtrack.start(state.market);$('#pause-overlay').classList.add('hidden');$('#pause-button').setAttribute('aria-label','Pause game');$('#pause-button').textContent='Ⅱ';canvas.focus();}
   refreshHUD();
 }
 function enterMarket() {
-  const next=Math.min(18,Math.floor(state.furthest/20));
+  const next=Math.min(18,Math.floor(state.distance/STAGE_LENGTH));
   if(next===state.market)return;state.market=next;state.bannerUntil=state.time+2.6;
-  $('#stage-name').textContent=MARKETS[next][0];$('#stage-banner').classList.remove('hidden');playTone(740,.15);
+  $('#stage-name').textContent=MARKETS[next][0];$('#stage-banner').classList.remove('hidden');soundtrack.market=next;soundtrack.effect('stage');
 }
 function update(delta) {
   const animated=state.screen==='playing'||state.screen==='ready';
   if(animated) {
     state.time+=delta;
     for(const vehicle of vehicles) {
-      vehicle.obj.position.x+=vehicle.direction*vehicle.speed*delta;
-      if(vehicle.obj.position.x>32)vehicle.obj.position.x=-32;
-      if(vehicle.obj.position.x<-32)vehicle.obj.position.x=32;
+      vehicle.obj.position.z-=vehicle.speed*delta;
+      if(vehicle.obj.position.z<-state.distance-65)vehicle.obj.position.z=-state.distance+25;
       for(const wheel of vehicle.obj.userData.wheels)wheel.rotation.y+=delta*vehicle.speed;
     }
-    for(const w of walkers){w.obj.position.x+=w.direction*w.speed*delta;if(Math.abs(w.obj.position.x)>9)w.direction*=-1;w.obj.rotation.z=Math.sin(state.time*4)*.035;}
-    for(const c of collectibles)if(!c.collected){c.obj.rotation.y=state.time*.65;c.obj.position.y=.25+Math.sin(state.time*3+c.row)*.07;}
+    for(const seller of shopkeepers){seller.obj.userData.joints.rightArm.rotation.z=-.45+Math.sin(state.time*2+seller.phase)*.28;seller.obj.rotation.y=Math.sin(state.time*.8+seller.phase)*.12;}
+    for(const c of collectibles)if(!c.collected){c.obj.rotation.y=state.time*.65;c.obj.position.y=.25+Math.sin(state.time*3+c.segment)*.07;}
   }
   if(state.screen==='playing') {
-    if(state.hop) {
-      const hop=state.hop;hop.time+=delta;const t=Math.min(1,hop.time/hop.duration),smooth=t*t*(3-2*t);
-      player.position.lerpVectors(hop.from,hop.to,smooth);player.position.y=Math.sin(t*Math.PI)*.46;
-      const swing=Math.sin(t*Math.PI*2)*.6;limbs.leftLeg.rotation.x=swing;limbs.rightLeg.rotation.x=-swing;limbs.leftArm.rotation.x=-swing;limbs.rightArm.rotation.x=swing;
-      limbs.leftArm.rotation.z=-Math.sin(t*Math.PI)*.3;limbs.rightArm.rotation.z=Math.sin(t*Math.PI)*.3;
-      if(t===1) {
-        state.row=hop.row;state.column=hop.column;state.hop=null;
-        state.furthest=Math.max(state.furthest,state.row);state.hops=state.furthest;
-        for(const limb of Object.values(limbs))limb.rotation.set(0,0,0);
-        if(state.hops>=3)$('#move-hint').classList.add('hidden');
-        enterMarket();ensureWorld();refreshHUD();
-      }
+    state.speed=Math.min(10.6,6.6+state.market*.24+state.distance*.0017);state.distance+=state.speed*delta;
+    const oldX=player.position.x;player.position.x=THREE.MathUtils.damp(oldX,state.lane*LANE_WIDTH,13,delta);player.position.z=-state.distance;
+    state.stride+=delta*(10.5+Math.min(2.5,(state.speed-6.6)*.5));const gait=Math.sin(state.stride);
+    player.position.y=.035+Math.abs(Math.sin(state.stride))*.065;
+    player.rotation.y=Math.PI+(player.position.x-oldX)*1.1;player.rotation.z=THREE.MathUtils.damp(player.rotation.z,(state.lane*LANE_WIDTH-player.position.x)*-.085,10,delta);
+    player.userData.body.rotation.x=-.12;
+    limbs.leftLeg.rotation.x=gait*.72;limbs.rightLeg.rotation.x=-gait*.72;
+    limbs.leftArm.rotation.x=-gait*.7;limbs.rightArm.rotation.x=gait*.7;limbs.leftArm.rotation.z=-.13;limbs.rightArm.rotation.z=.13;
+    const foot=Math.floor(state.stride/Math.PI);if(foot!==state.lastFoot){state.lastFoot=foot;soundtrack.effect('footstep');}
+    enterMarket();ensureWorld();
+    for(const trader of traders) {
+      const ahead=-trader.z-state.distance;
+      if(ahead<26&&ahead>-3&&!trader.warning){trader.warning=true;trader.marker.visible=true;soundtrack.effect('warn');}
+      if(ahead<21&&ahead>-3)trader.phase=Math.min(1,trader.phase+delta*.75);
+      const ease=trader.phase*trader.phase*(3-2*trader.phase);trader.obj.position.x=THREE.MathUtils.lerp(trader.from,trader.target,ease);
+      trader.obj.userData.joints.rightArm.rotation.z=-.8+Math.sin(state.time*5)*.25;
+      trader.obj.userData.joints.leftLeg.rotation.x=trader.phase<1?Math.sin(state.time*8)*.35:0;
+      trader.obj.userData.joints.rightLeg.rotation.x=-trader.obj.userData.joints.leftLeg.rotation.x;
+      if(ahead<-3)trader.marker.visible=false;
+      if(Math.abs(trader.z-player.position.z)<.66&&Math.abs(trader.obj.position.x-player.position.x)<.58){finishRun('trader');break;}
     }
-    // Collision uses actual 3D ground positions, including during a hop.
-    for(const v of vehicles)if(Math.abs(v.obj.position.z-player.position.z)<.7&&Math.abs(v.obj.position.x-player.position.x)<v.length/2+.2){finishRun(v.obj.userData.kind);break;}
-    if(state.screen==='playing')for(const w of walkers)if(Math.abs(w.obj.position.z-player.position.z)<.65&&Math.abs(w.obj.position.x-player.position.x)<.65){finishRun('eyo');break;}
-    if(state.screen==='playing') {
-      for(const c of collectibles)if(!c.collected&&Math.abs(c.obj.position.z-player.position.z)<.65&&Math.abs(c.obj.position.x-player.position.x)<.65){c.collected=true;c.obj.visible=false;state.suya++;playTone(900,.11);refreshHUD();}
-      if(!state.hop) {
-        if(state.queued){const next=state.queued;state.queued=null;move(next);}
-        else if(state.pointerTarget) {
-          const target=state.pointerTarget;
-          if(target.column!==state.column)move(target.column>state.column?'right':'left');
-          else if(target.row!==state.row)move(target.row>state.row?'up':'down');
-          else state.pointerTarget=null;
-        }
-      }
-    }
+    if(state.screen==='playing')for(const o of obstacles)if(Math.abs(o.z-player.position.z)<o.depth+.25&&Math.abs(o.obj.position.x-player.position.x)<o.width+.22){finishRun(o.kind);break;}
+    if(state.screen==='playing')for(const c of collectibles)if(!c.collected&&Math.abs(c.z-player.position.z)<.65&&Math.abs(c.obj.position.x-player.position.x)<.65){c.collected=true;c.obj.visible=false;state.suya++;soundtrack.effect('collect');refreshHUD();}
+    if(state.distance>24)$('#move-hint').classList.add('hidden');
+    if(Math.floor(state.distance)!==lastHud){lastHud=Math.floor(state.distance);refreshHUD();}
     if(state.bannerUntil&&state.time>state.bannerUntil){$('#stage-banner').classList.add('hidden');state.bannerUntil=0;}
   }
-  if(state.screen==='ready') { player.position.y=Math.sin(state.time*2)*.025; }
-  const desiredZ=-state.furthest*STEP_Z+(state.screen==='ready'?6:-4.2);
+  if(state.screen==='ready') {player.position.y=Math.sin(state.time*2)*.025;player.userData.body.rotation.x=0;}
+  const desiredZ=-state.distance+(state.screen==='ready'?4:-6.5);
   cameraZ=THREE.MathUtils.damp(cameraZ,desiredZ,5,delta);
-  camera.position.set(8.8,16,cameraZ+21);camera.lookAt(0,0,cameraZ);
+  camera.position.set(5.5,14,cameraZ+21);camera.lookAt(0,.6,cameraZ);
   sun.position.set(-12,22,cameraZ+10);sun.target.position.set(0,0,cameraZ);sun.target.updateMatrixWorld();
 }
 function resize() {
   const width=innerWidth,height=innerHeight,aspect=width/height;
-  const viewHeight=aspect<.8?27:aspect>1.8?19:23;
+  const viewHeight=aspect<.8?27:aspect>1.8?19:22;
   camera.left=-viewHeight*aspect/2;camera.right=viewHeight*aspect/2;camera.top=viewHeight/2;camera.bottom=-viewHeight/2;camera.updateProjectionMatrix();renderer.setSize(width,height,false);
 }
 function frame(time) {
@@ -375,11 +463,11 @@ async function loadIdentity() {
   if(identity.face)$('#player-face').src=identity.face;
   else $('#player-face').src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" fill="#f6c928"/><circle cx="40" cy="38" r="20" fill="#8d5524"/><ellipse cx="40" cy="22" rx="23" ry="14" fill="#17120f"/><path d="M12 80V68Q40 45 68 68V80" fill="#f7b731"/></svg>');
   $('#sign-in-button').hidden=signedIn;
-  $('#welcome').textContent=signedIn?`Welcome, ${identity.name}! Let's hit the market.`:'Your market adventure starts here.';
+  $('#welcome').textContent=signedIn?`${identity.name}, Balogun's fabric sellers are ready for you.`:"Balogun's fabric sellers are ready for you.";
 }
 async function saveScore() {
   if(!signedIn)return;
-  const result=await askStartNg({type:'startng:score',stats:{distance:Math.round(state.hops*12.5),lanterns:state.suya}},'startng:scoreSaved');
+  const result=await askStartNg({type:'startng:score',stats:{distance:Math.floor(state.distance),lanterns:state.suya}},'startng:scoreSaved');
   $('#save-message').textContent=result?.ok?`Best run saved. You're #${result.result?.rank??'—'} on the board.`:'Run saved on this device. The global board is unavailable.';
 }
 async function loadLeaderboard() {
@@ -390,37 +478,45 @@ async function loadLeaderboard() {
   }catch{loading.textContent='The board is taking a market break. Try again.';}
 }
 
-const keyMap={ArrowUp:'up',w:'up',ArrowDown:'down',s:'down',ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right'};
+const keyMap={ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right'};
 window.addEventListener('keydown',event=>{
   if(document.querySelector('dialog[open]'))return;
   const key=event.key.length===1?event.key.toLowerCase():event.key;
-  if(keyMap[key]){event.preventDefault();state.pointerTarget=null;move(keyMap[key]);}
+  if(keyMap[key]){event.preventDefault();if(!event.repeat)move(keyMap[key]);}
   else if(key==='p'||key==='Escape'){event.preventDefault();togglePause();}
   else if(key==='Enter'&&(state.screen==='ready'||state.screen==='gameover'))startRun();
 },{capture:true});
-const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2(),ground=new THREE.Plane(new THREE.Vector3(0,1,0),0),intersection=new THREE.Vector3();
 let pointerStart=null;
-canvas.addEventListener('pointerdown',event=>{canvas.focus();pointerStart={x:event.clientX,y:event.clientY};});
+function steerPointer(event) {
+  if(state.screen!=='playing')return;
+  const rect=canvas.getBoundingClientRect(),ratio=(event.clientX-rect.left)/rect.width;
+  state.lane=ratio<.36?-1:ratio>.64?1:0;refreshHUD();
+}
+canvas.addEventListener('pointermove',event=>{if(event.pointerType==='mouse')steerPointer(event);});
+canvas.addEventListener('pointerdown',event=>{canvas.focus();pointerStart={x:event.clientX,y:event.clientY};if(event.pointerType==='mouse')steerPointer(event);});
 canvas.addEventListener('pointerup',event=>{
   if(!pointerStart||state.screen!=='playing'){pointerStart=null;return;}
-  const dx=event.clientX-pointerStart.x,dy=event.clientY-pointerStart.y;pointerStart=null;
-  if(Math.max(Math.abs(dx),Math.abs(dy))>24){state.pointerTarget=null;move(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy<0?'up':'down');return;}
-  const rect=canvas.getBoundingClientRect();mouse.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);
-  if(raycaster.ray.intersectPlane(ground,intersection)) {
-    const column=Math.max(-BOUND,Math.min(BOUND,Math.round(intersection.x/STEP_X))),row=Math.max(Math.max(0,state.furthest-5),Math.min(state.row+4,Math.round(-intersection.z/STEP_Z)));
-    state.pointerTarget={column,row};
-  }
+  const dx=event.clientX-pointerStart.x;pointerStart=null;
+  if(Math.abs(dx)>24){move(dx>0?'right':'left');return;}
+  steerPointer(event);
 });
 canvas.addEventListener('pointercancel',()=>{pointerStart=null;});
-for(const b of document.querySelectorAll('[data-move]'))b.addEventListener('pointerdown',event=>{event.preventDefault();state.pointerTarget=null;move(b.dataset.move);});
+for(const b of document.querySelectorAll('[data-move]'))b.addEventListener('pointerdown',event=>{event.preventDefault();move(b.dataset.move);});
 $('#start-button').onclick=startRun;$('#restart-button').onclick=startRun;$('#pause-button').onclick=togglePause;$('#resume-button').onclick=togglePause;
-$('#home-button').onclick=()=>{state.screen='ready';state.hop=null;player.rotation.set(0,0,0);$('#gameover-overlay').classList.add('hidden');$('#title-overlay').classList.remove('hidden');refreshHUD();};
-$('#sound-button').onclick=()=>{soundOn=!soundOn;$('#sound-button').textContent=soundOn?'♫':'♪';$('#sound-button').setAttribute('aria-label',soundOn?'Mute sound':'Unmute sound');$('#sound-button').style.opacity=soundOn?1:.55;};
+$('#home-button').onclick=()=>{state.screen='ready';soundtrack.pause();player.rotation.set(0,0,0);$('#gameover-overlay').classList.add('hidden');$('#title-overlay').classList.remove('hidden');refreshHUD();};
 $('#sign-in-button').onclick=()=>{location.href=`${START_NG}/?return_to=${encodeURIComponent(location.origin+location.pathname)}`;};
 let resumeAfterDialog=false;
 for(const b of document.querySelectorAll('[data-open]'))b.onclick=()=>{resumeAfterDialog=state.screen==='playing';if(resumeAfterDialog)togglePause();$('#'+b.dataset.open).showModal();if(b.dataset.open==='board-dialog')loadLeaderboard();};
 for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>b.closest('dialog').close();
 for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('close',()=>{if(resumeAfterDialog&&state.screen==='paused')togglePause();resumeAfterDialog=false;});
+$('#music-volume').oninput=event=>{soundtrack.setVolumes(Number(event.target.value)/100,soundtrack.effectsVolume);$('#music-level').textContent=event.target.value+'%';};
+$('#effects-volume').oninput=event=>{soundtrack.setVolumes(soundtrack.musicVolume,Number(event.target.value)/100);$('#effects-level').textContent=event.target.value+'%';};
+$('#audio-toggle').onclick=()=>{soundtrack.setEnabled(!soundtrack.enabled);$('#audio-toggle').textContent=soundtrack.enabled?'Mute all sound':'Enable sound';refreshHUD();};
+$('#preview-music').onclick=()=>{soundtrack.start(state.market);$('#preview-music').textContent='Music playing ♫';};
+$('#sound-dialog').addEventListener('close',()=>{if(state.screen!=='playing')soundtrack.pause();$('#preview-music').textContent='Preview the market groove';});
+$('#music-volume').value=Math.round(soundtrack.musicVolume*100);$('#music-level').textContent=Math.round(soundtrack.musicVolume*100)+'%';
+$('#effects-volume').value=Math.round(soundtrack.effectsVolume*100);$('#effects-level').textContent=Math.round(soundtrack.effectsVolume*100)+'%';
+$('#audio-toggle').textContent=soundtrack.enabled?'Mute all sound':'Enable sound';
 $('#refresh-board').onclick=loadLeaderboard;
 MARKETS.forEach(m=>{const li=document.createElement('li');li.textContent=m[0];$('#market-route').append(li);});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.screen==='playing')togglePause();}else loadIdentity();});
