@@ -1,0 +1,8 @@
+{
+  "leaderboard": {
+    "stats": [
+      { "key": "distance", "label": "Distance (m)", "order": "highest" },
+      { "key": "lanterns", "label": "Lanterns", "order": "highest" }
+    ]
+  }
+}
