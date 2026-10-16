@@ -165,20 +165,23 @@ function makeVehicle(kind='danfo',color='#eebd24') {
 }
 function makeEyo() {
   const g=new THREE.Group();
-  const robe=cylinder(g,.38,.7,1.8,'#17151b',0,.92,0,12);robe.scale.z=.72;
-  for(const x of [-.36,.36]){const hem=box(g,.25,.1,.55,'#5f1e2c',x,.1,0);hem.rotation.z=x<0?.12:-.12;}
-  const veil=sphere(g,.4,'#31242b',0,1.76,0,.9,1.2,.8);
-  const mask=box(g,.48,.52,.18,'#e8d7bc',0,1.75,.16);mask.rotation.z=.02;
-  box(g,.32,.08,.04,'#431b25',0,1.89,.27);
-  const eyes=[];for(const x of [-.11,.11])eyes.push(sphere(g,.043,'#e83f39',x,1.82,.27,1,.8,.65));
-  const mouth=box(g,.2,.06,.04,'#20151a',0,1.63,.28);mouth.rotation.z=-.05;
-  // A tall crowned headdress makes Eyo readable even when the camera is pulled back.
-  cylinder(g,.52,.38,.12,'#f0e3c8',0,2.08,0,12);cylinder(g,.33,.16,.5,'#eee0c1',0,2.35,0,10);
-  for(const x of [-.22,0,.22]){const spike=cylinder(g,0,.09,.42,'#d3bd94',x,2.67,0,5);spike.rotation.z=x*.55;}
-  const staff=cylinder(g,.035,.055,2.6,'#34251e',.62,1.24,0,8);staff.rotation.z=-.2;
-  const staffTop=sphere(g,.14,'#e2ad3f',.84,2.52,0,.8,1.25,.8);
-  const arms=[];for(const x of [-.34,.34]){const arm=cylinder(g,.08,.12,.82,'#211820',x,1.25,0);arm.rotation.z=x<0?.95:-.95;arms.push(arm);}
+  // Eyo is kept in the traditional all-white masquerade palette: flowing robe,
+  // covered face and tall white crown, with only dark mask details and a wood staff.
+  const robe=cylinder(g,.38,.7,1.8,'#f8f3e6',0,.92,0,12);robe.scale.z=.72;
+  for(const x of [-.36,.36]){const hem=box(g,.25,.1,.55,'#d8ccb3',x,.1,0);hem.rotation.z=x<0?.12:-.12;}
+  const veil=sphere(g,.4,'#fffaf0',0,1.76,0,.9,1.2,.8);
+  const mask=box(g,.48,.52,.18,'#fffdf5',0,1.75,.16);mask.rotation.z=.02;
+  box(g,.32,.08,.04,'#282620',0,1.89,.27);
+  const eyes=[];for(const x of [-.11,.11])eyes.push(sphere(g,.043,'#171713',x,1.82,.27,1,.8,.65));
+  const mouth=box(g,.2,.06,.04,'#28231e',0,1.63,.28);mouth.rotation.z=-.05;
+  // A tall white crowned headdress makes Eyo readable while staying natural.
+  cylinder(g,.52,.38,.12,'#fffaf0',0,2.08,0,12);cylinder(g,.33,.16,.5,'#f5eedf',0,2.35,0,10);
+  for(const x of [-.22,0,.22]){const spike=cylinder(g,0,.09,.42,'#eee4d1',x,2.67,0,5);spike.rotation.z=x*.55;}
+  const staff=cylinder(g,.035,.055,2.6,'#5b3b27',.62,1.24,0,8);staff.rotation.z=-.2;
+  const staffTop=sphere(g,.14,'#d2a64d',.84,2.52,0,.8,1.25,.8);
+  const arms=[];for(const x of [-.34,.34]){const arm=cylinder(g,.08,.12,.82,'#f8f3e6',x,1.25,0);arm.rotation.z=x<0?.95:-.95;arms.push(arm);}
   g.userData.scare={robe,veil,eyes,arms,staff,staffTop,mouth};
+  g.scale.setScalar(1.05);
   return g;
 }
 function makeSuya() {
@@ -332,7 +335,7 @@ function addBlocker(index,z,lane,kind='cart') {
     const call=goods==='clothes'?'FINE ANKARA!':goods==='shoes'?'TRY THESE SHOES!':goods==='bags'?'FINE BAGS!':'CUSTOMER, COME!';
     sign(marker,call,lane*LANE_WIDTH,2.65,z,2.5,'#fff0cb');marker.visible=false;
     obj.userData.goods=goods;traders.push({obj,segment:index,z,lane,side,from:side*4.9,target:lane*LANE_WIDTH,phase:0,warning:false,marker,swerve:index%3!==0});
-  } else if(kind==='eyo') {obj=makeEyo();obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,width:.6,depth:.65,kind:'Eyo masquerade'});}
+  } else if(kind==='eyo') {obj=makeEyo();obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,baseX:lane*LANE_WIDTH,width:.48,depth:.58,kind:'Eyo masquerade'});}
   else {obj=makeCart(MARKETS[stage][3][index%4]);obj.position.set(lane*LANE_WIDTH,0,z);obstacles.push({obj,segment:index,z,lane,width:.65,depth:.75,kind:'stock trolley'});}
   world.add(obj);return obj;
 }
@@ -390,7 +393,8 @@ function addRow(index) {
   if(index>6&&(index+stage)%7===0)addRoadCrossing(index,-index*SEGMENT_LENGTH);
   if(index%2===0){tree(group,10,-5);box(group,2.5,.6,1.5,'#b79b6d',10,.3,2);}
   if(index>=2){
-    const lane=index===2?0:Math.floor(random(index,2)*3)-1;
+    // Keep the opening seller on the left so the starting lane always has a clean pass.
+    const lane=index===2?-1:Math.floor(random(index,2)*3)-1;
     const kind=index===2||random(index,4)<.52?'trader':index%7===0?'eyo':'cart';
     addBlocker(index,-index*SEGMENT_LENGTH-1,lane,kind);
     if(stage>=2||index%3===0){const lane2=lane===1?-1:1;addBlocker(index,-index*SEGMENT_LENGTH-1,lane2,index%5===0?'trader':'cart');}
@@ -530,7 +534,9 @@ function update(delta) {
       const ahead=-o.obj.position.z-state.distance;
       if(o.fleeing){o.obj.position.z-=delta*(10+state.market*.3);o.z=o.obj.position.z;continue;}
       if(ahead<23&&ahead>-5&&!o.chasing){o.chasing=true;soundtrack.effect('eyo');shout('EYO DEY CHASE YOU! RUN!',1.4);}
-      if(o.chasing&&!o.stunned){o.obj.position.z+=delta*(5.2+state.market*.3);o.obj.position.x=THREE.MathUtils.damp(o.obj.position.x,player.position.x,5,delta);o.obj.rotation.z=Math.sin(state.time*10)*.12;o.obj.userData.scare.arms.forEach((arm,i)=>arm.rotation.z=(i?-1:1)*(.95+Math.sin(state.time*12)*.25));o.z=o.obj.position.z;}
+      // Eyo advances down its own lane, but never tracks the player's lane.
+      // One clean dodge is enough to pass; the scare comes from its speed and animation.
+      if(o.chasing&&!o.stunned){o.obj.position.z+=delta*(5.2+state.market*.3);o.obj.position.x=o.baseX+Math.sin(state.time*2.5+o.segment)*.16;o.obj.rotation.z=Math.sin(state.time*10)*.12;o.obj.userData.scare.arms.forEach((arm,i)=>arm.rotation.z=(i?-1:1)*(.95+Math.sin(state.time*12)*.25));o.z=o.obj.position.z;}
       if(o.stunned){o.stunned-=delta;o.obj.position.z-=delta*12;o.z=o.obj.position.z;if(o.stunned<=0)o.fleeing=true;}
     }
     if(state.screen==='playing')for(const o of obstacles)if(!o.fleeing&&Math.abs(o.obj.position.z-player.position.z)<o.depth+.25&&Math.abs(o.obj.position.x-player.position.x)<o.width+.22){finishRun(o.kind);break;}

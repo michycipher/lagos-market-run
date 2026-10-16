@@ -42,11 +42,12 @@ run('state.distance=1505;ensureWorld()');assert.ok(goods('rows.get(94)').include
 run('state.distance=750;ensureWorld()');assert.ok(run("(()=>{let mall=0,bridge=0;rows.get(48)?.traverse(o=>{if(o.userData.kind==='tejuosho-mall')mall++;if(o.userData.kind==='tejuosho-footbridge')bridge++});return mall===2&&bridge===1})()"),'Tejuosho renders a mall frontage and footbridge');
 run('startRun();state.money=20;addWaterHawker(8,-1,0);const h=waterHawkers.at(-1);h.z=-1;h.from=0;h.target=0;h.obj.position.set(0,0,-1);interact()');assert.equal(run('state.money'),0,'pure water costs scarce cash');assert.equal(run('state.water'),1,'pure water can be bought from a hawker');
 run('startRun();addBlocker(10,-6,0,"eyo");const e=obstacles.at(-1);e.obj.position.z=-6;e.z=-6;state.water=1;throwWater()');assert.equal(run('state.water'),0,'throwing pure water consumes one sachet');assert.equal(run('e.fleeing'),true,'pure water makes the chasing Eyo flee');
-run('startRun();state.distance=13');tick(50);assert.ok(run('traders[0].warning'),'shopkeeper warns before stepping out');assert.ok(run('Math.abs(traders[0].obj.position.x)')<4.9,'shopkeeper physically steps into the aisle');
+run('startRun();state.distance=13');tick(50);assert.ok(run('traders[0].warning'),'shopkeeper warns before stepping out');assert.ok(run('Math.abs(traders[0].obj.position.x)')<4.9,'shopkeeper physically steps into the aisle');assert.ok(run('traders[0].target===-LANE_WIDTH'),'the opening seller leaves the starting lane clear');
 run('startRun();const t=traders[0];t.z=0;t.obj.position.set(0,0,0);t.from=0;t.target=0');tick(1);
 assert.equal(run('state.screen'),'gameover','contact with a trader ends a run');
 run('startRun();const cart=addBlocker(3,0,0);');tick(1);assert.equal(run('state.screen'),'gameover','stock trolleys block the runner');
 run('startRun();addBlocker(3,0,0,"eyo")');tick(1);assert.equal(run('state.screen'),'gameover','Eyo remains a physical obstacle');
+run('startRun();addBlocker(10,-6,-1,"eyo");const laneEyo=obstacles.at(-1);laneEyo.obj.position.z=-6;laneEyo.z=-6;state.distance=0;state.lane=1');tick(30);assert.ok(run('Math.abs(laneEyo.obj.position.x+LANE_WIDTH)<.35'),'Eyo chase stays in one lane so one dodge is enough');
 run('startRun();for(let r=1;r<100;r++){state.distance=r*SEGMENT_LENGTH;ensureWorld()}');
 assert.ok(run('rows.size')<=8,'endless generation prunes old market segments');
 assert.ok(run('vehicles.filter(v=>!v.crossing).every(v=>v.obj.position.x===-12.7)'),'service-road traffic stays beside the shops');
