@@ -1,332 +1,429 @@
+import * as THREE from './vendor/three.module.js';
+
 const START_NG = 'https://start.ng';
 const API = 'https://api.start.ng';
 const GAME_NAME = location.hostname.endsWith('.start.ng') ? location.hostname.split('.')[0] : 'lagos-market-run';
-
-const MARKET_STAGES = [
-  { name:'Balogun Market', short:'Balogun', sign:'FABRICS · LAGOS ISLAND', left:'ANKARA', right:'LACE', sky:'#173243', glow:'#e85d45' },
-  { name:'Mushin Market', short:'Mushin', sign:'AUTO PARTS · MUSHIN', left:'SPARES', right:'TOKUNBO', sky:'#3f2b35', glow:'#ff8b3d' },
-  { name:'Yaba Market', short:'Yaba', sign:'TECH · YABA', left:'PHONES', right:'TEJUOSHO', sky:'#183a42', glow:'#31b78c' },
-  { name:'Tejuosho Market', short:'Tejuosho', sign:'FASHION · YABA', left:'KICKS', right:'TEXTILES', sky:'#33304a', glow:'#ffb454' },
-  { name:'Oyingbo Market', short:'Oyingbo', sign:'FOODSTUFF · EBUTE METTA', left:'PEPPER', right:'YAM', sky:'#3f3329', glow:'#e85d45' },
-  { name:'Oshodi Market', short:'Oshodi', sign:'THE BUS STOP MARKET', left:'BAGS', right:'SNEAKERS', sky:'#34302a', glow:'#d8fd71' },
-  { name:'Mile 12 Market', short:'Mile 12', sign:'FRESH PRODUCE · KETU', left:'TOMATO', right:'PLANTAIN', sky:'#30422f', glow:'#ffb454' },
-  { name:'Computer Village', short:'Computer Village', sign:'GADGETS · IKEJA', left:'IPHONE', right:'REPAIR', sky:'#20384c', glow:'#55c7ff' },
-  { name:'Ladipo Market', short:'Ladipo', sign:'MOTOR PARTS · MUSHIN', left:'TOYOTA', right:'ENGINES', sky:'#433129', glow:'#e85d45' },
-  { name:'Alaba International', short:'Alaba', sign:'ELECTRONICS · OJO', left:'TVS', right:'SOLAR', sky:'#243b45', glow:'#31b78c' },
-  { name:'Idumota Market', short:'Idumota', sign:'WHOLESALE · LAGOS ISLAND', left:'SHOES', right:'CLOTHES', sky:'#3e2e42', glow:'#ff6b95' },
-  { name:'Jankara Market', short:'Jankara', sign:'HERBS · LAGOS ISLAND', left:'ADIRE', right:'SPICES', sky:'#3c3424', glow:'#d8fd71' },
-  { name:'Epe Fish Market', short:'Epe Fish', sign:'SEAFOOD · EPE', left:'FISH', right:'CRABS', sky:'#1b3d4e', glow:'#55c7ff' },
-  { name:'Ajah Market', short:'Ajah', sign:'COASTAL MARKET · AJAH', left:'FRUIT', right:'BASKETS', sky:'#3d2d35', glow:'#ffb454' },
-  { name:'Ikotun Market', short:'Ikotun', sign:'NORTH LAGOS · IKOTUN', left:'PROVISIONS', right:'KIOSK', sky:'#293b31', glow:'#31b78c' },
-  { name:'Igando Market', short:'Igando', sign:'COMMUNITY MARKET · IGANDO', left:'GRAINS', right:'CLOTH', sky:'#403229', glow:'#e85d45' },
-  { name:'Lekki Market', short:'Lekki', sign:'ARTS · CRAFTS · LEKKI', left:'BEADS', right:'WOODWORK', sky:'#1c3b42', glow:'#d8fd71' },
-  { name:'Agbalata Market', short:'Agbalata', sign:'BADAGRY MARKET', left:'SEAFOOD', right:'BASKETS', sky:'#3c2d2a', glow:'#ff8b3d' },
-  { name:'Sangotedo Market', short:'Sangotedo', sign:'LAST STOP · SANGOTEDO', left:'SUYA', right:'MAMA PUT', sky:'#26333d', glow:'#ffb454' }
-];
-
-let connectFramePromise;
-let currentIdentity = null;
-let soundOn = true;
-let audioContext;
-
-function connectFrame() {
-  connectFramePromise ??= new Promise((resolve, reject) => {
-    const frame = document.createElement('iframe');
-    frame.src = `${START_NG}/connect`;
-    frame.hidden = true;
-    frame.onload = () => resolve(frame);
-    frame.onerror = reject;
-    document.body.append(frame);
-  });
-  return connectFramePromise;
-}
-
-async function askStartNg(message, replyType, timeoutMs = 1600) {
-  try {
-    const frame = await connectFrame();
-    return await new Promise((resolve) => {
-      const requestId = Math.random().toString(36).slice(2);
-      const finish = (reply) => { clearTimeout(timer); removeEventListener('message', onMessage); resolve(reply); };
-      const timer = setTimeout(() => finish(null), timeoutMs);
-      function onMessage(event) {
-        if (event.origin !== START_NG || event.source !== frame.contentWindow) return;
-        if (event.data?.type === replyType && event.data.requestId === requestId) finish(event.data);
-      }
-      addEventListener('message', onMessage);
-      frame.contentWindow.postMessage({ ...message, requestId }, START_NG);
-    });
-  } catch { return null; }
-}
-
-const canvas = document.querySelector('#game-canvas');
-const ctx = canvas.getContext('2d');
-const W = canvas.width;
-const H = canvas.height;
-const laneX = [315, 480, 645];
-const playerY = 425;
-const state = { screen:'ready', lane:1, targetLane:1, distance:0, lanterns:0, speed:260, elapsed:0, objects:[], lastTime:0, best:Number(localStorage.getItem('lagos-market-run-best') || 0), spawnTimer:0, shake:0, marketIndex:0, stageBannerTimer:0 };
-
 const $ = (selector) => document.querySelector(selector);
-const distanceValue = $('#distance-value');
-const lanternValue = $('#lantern-value');
-const bestValue = $('#best-value');
-const stageValue = $('#stage-value');
-const runStatus = $('#run-status');
-const titleOverlay = $('#title-overlay');
-const gameoverOverlay = $('#gameover-overlay');
-const pauseBadge = $('#pause-badge');
-const stageBanner = $('#stage-banner');
-const stageName = $('#stage-name');
-const marketRoute = $('#market-route');
+const MARKETS = [
+  ['Balogun Market','ANKARA & LACE','#d45532'],['Mushin Market','SPARES & SUYA','#1d8d78'],
+  ['Yaba Market','TECH & THRIFT','#336dba'],['Tejuosho Market','FASHION STOP','#a251a0'],
+  ['Oyingbo Market','FRESH FOOD','#d57329'],['Oshodi Market','BUS STOP HUSTLE','#238d72'],
+  ['Mile 12 Market','PEPPER & PLANTAIN','#c44e2f'],['Computer Village','PHONES & GADGETS','#297b9a'],
+  ['Ladipo Market','MOTOR PARTS','#bd792c'],['Alaba International','ELECTRONICS','#2c907b'],
+  ['Idumota Market','WHOLESALE','#934c80'],['Jankara Market','ADIRE & SPICES','#bd6b30'],
+  ['Epe Fish Market','FRESH SEAFOOD','#327da1'],['Ajah Market','COASTAL HUSTLE','#de7540'],
+  ['Ikotun Market','PROVISIONS','#42835c'],['Igando Market','GRAINS & CLOTH','#a9613b'],
+  ['Lekki Market','ART & CRAFT','#218b86'],['Agbalata Market','BADAGRY BASKETS','#cf7a36'],
+  ['Sangotedo Market','LAST STOP, MORE SUYA','#a76135']
+];
+const STEP_X = 1.55, STEP_Z = 2.4, BOUND = 6;
+const state = { screen:'ready', row:0, column:0, furthest:0, hops:0, suya:0, market:0, time:0,
+  hop:null, queued:null, pointerTarget:null, bannerUntil:0, best:Number(localStorage.getItem('lagos-market-run-best-3d') || 0) };
+let identity = { name:'Guest', style:{} }, signedIn = false, soundOn = true, audio;
+let framePromise, player, limbs, cameraZ=6, previousTime=0;
+const rows = new Map(), vehicles = [], walkers = [], collectibles = [], obstacles = [];
+const materialCache = new Map(), geometryCache = new Map();
+const canvas = $('#game-canvas');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false, powerPreference:'high-performance' }); }
+catch { $('#render-error').classList.remove('hidden'); $('#loading').classList.add('hidden'); throw new Error('WebGL 2 unavailable'); }
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor('#c46134');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#c46134');
+scene.fog = new THREE.Fog('#c46134',65,115);
+const camera = new THREE.OrthographicCamera(-16,16,10,-10,.1,160);
+const hemi = new THREE.HemisphereLight('#fff6df','#8b613c',2.5); scene.add(hemi);
+const sun = new THREE.DirectionalLight('#fff2d4',3.2); sun.position.set(-12,22,10);
+sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-26;sun.shadow.camera.right=26;
+sun.shadow.camera.top=26;sun.shadow.camera.bottom=-26;sun.shadow.camera.near=.1;sun.shadow.camera.far=65;
+sun.shadow.normalBias=.03;sun.shadow.bias=-.0003;sun.shadow.radius=3; scene.add(sun,sun.target);
+const world = new THREE.Group(); scene.add(world);
 
-function stageForDistance(distance) {
-  return Math.min(MARKET_STAGES.length - 1, Math.floor(distance / 250));
+function mat(color) {
+  if (!materialCache.has(color)) materialCache.set(color,new THREE.MeshLambertMaterial({ color, flatShading:true }));
+  return materialCache.get(color);
+}
+function geometry(key, create) {
+  if (!geometryCache.has(key)) geometryCache.set(key,create());
+  return geometryCache.get(key);
+}
+function mesh(parent,geom,color,x=0,y=0,z=0) {
+  const obj=new THREE.Mesh(geom,mat(color)); obj.position.set(x,y,z);obj.castShadow=true;obj.receiveShadow=true; parent.add(obj);return obj;
+}
+function box(parent,w,h,d,color,x=0,y=0,z=0) { return mesh(parent,geometry(`b:${w},${h},${d}`,()=>new THREE.BoxGeometry(w,h,d)),color,x,y,z); }
+function sphere(parent,r,color,x=0,y=0,z=0,sx=1,sy=1,sz=1) {
+  const obj=mesh(parent,geometry(`s:${r}`,()=>new THREE.SphereGeometry(r,12,9)),color,x,y,z);obj.scale.set(sx,sy,sz);return obj;
+}
+function cylinder(parent,r1,r2,h,color,x=0,y=0,z=0,sides=10) {
+  return mesh(parent,geometry(`c:${r1},${r2},${h},${sides}`,()=>new THREE.CylinderGeometry(r1,r2,h,sides)),color,x,y,z);
+}
+function sign(parent,text,x,y,z,width=3.2,color='#f7ce45') {
+  const c=document.createElement('canvas');c.width=512;c.height=128;
+  const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,512,128);ctx.strokeStyle='#302920';ctx.lineWidth=14;ctx.strokeRect(0,0,512,128);
+  ctx.fillStyle='#29251d';ctx.font=`900 ${text.length>21?27:35}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,256,67,478);
+  const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;
+  const obj=new THREE.Mesh(geometry('sign',()=>new THREE.PlaneGeometry(1,1)),new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));
+  obj.scale.set(width,width/4,1);obj.position.set(x,y,z);parent.add(obj);parent.userData.textures??=[];parent.userData.textures.push(texture);return obj;
 }
 
-function currentMarket() {
-  return MARKET_STAGES[state.marketIndex] || MARKET_STAGES[0];
+// A jointed 3D avatar: the start.ng style controls body, clothes, hair, hat and accessories.
+function createCharacter(style={}, scale=1) {
+  const root=new THREE.Group(), body=new THREE.Group();root.add(body);root.scale.setScalar(scale);
+  const skin=style.skinColor||'#8d5524', top=style.primaryColor||'#f7b731',bottom=style.secondaryColor||'#5f3dc4',hair=style.hairColor||'#17120f';
+  const female=style.body!=='male';
+  sphere(body,.29,top,0,1.05,0,female?1:1.12,1.5,.72);
+  cylinder(body,.13,.17,.17,skin,0,1.47,0);
+  sphere(body,.28,skin,0,1.73,0,.88,1.07,.9);
+  sphere(body,.065,skin,-.25,1.73,0);sphere(body,.065,skin,.25,1.73,0);
+  // Face looks toward local +Z; rotation follows each hop.
+  sphere(body,.025,'#211a15',-.087,1.77,.232);sphere(body,.025,'#211a15',.087,1.77,.232);
+  sphere(body,.045,skin,0,1.7,.255,.8,.7,1);
+  const mouth=box(body,.09,.013,.015,'#7c3d24',0,1.63,.241);
+  if (style.hair!=='bald') {
+    sphere(body,.29,hair,0,1.93,-.025,1.03,.62,1);
+    const type=style.hair||'afro';
+    if(type==='afro'||type==='dreads') {
+      sphere(body,.36,hair,0,2.02,-.03,1.07,.91,1);
+      for(let i=0;i<7;i++){const a=i*Math.PI*2/7;sphere(body,.13,hair,Math.cos(a)*.27,2.04+Math.sin(a)*.08,Math.sin(a)*.22);}
+    } else if(type==='bun') sphere(body,.19,hair,0,2.18,-.1);
+    else if(type==='ponytail') {sphere(body,.14,hair,0,1.94,-.31);cylinder(body,.09,.035,.4,hair,0,1.66,-.36);}
+    else if(type==='braids') for(const side of [-1,1]) cylinder(body,.065,.035,.62,hair,side*.23,1.67,-.11);
+  }
+  const joints={};
+  for(const side of [-1,1]) {
+    const arm=new THREE.Group();arm.position.set(side*.32,1.35,0);body.add(arm);
+    cylinder(arm,.085,.075,.32,top,0,-.11,0);cylinder(arm,.065,.055,.4,skin,0,-.42,0);sphere(arm,.075,skin,0,-.64,0);
+    const leg=new THREE.Group();leg.position.set(side*.13,.7,0);body.add(leg);
+    cylinder(leg,.105,.075,.59,bottom,0,-.25,0);box(leg,.17,.12,.27,'#332b25',0,-.57,.047);
+    joints[side<0?'leftArm':'rightArm']=arm;joints[side<0?'leftLeg':'rightLeg']=leg;
+  }
+  if(style.accessory==='earrings') for(const side of [-1,1]) sphere(body,.044,'#ffd23d',side*.27,1.64,.02);
+  if(style.accessory==='glasses') {for(const side of [-1,1])box(body,.13,.075,.035,'#282824',side*.09,1.77,.256);box(body,.05,.025,.04,'#282824',0,1.77,.26);}
+  if(style.accessory==='scarf') {cylinder(body,.19,.2,.11,'#df523c',0,1.43,0);box(body,.13,.4,.07,'#df523c',.13,1.15,.23);}
+  if(style.accessory==='backpack') box(body,.42,.49,.2,'#397b74',0,1.1,-.26);
+  if(style.accessory==='beard') sphere(body,.15,hair,0,1.56,.13,1,.6,.8);
+  if(style.hat&&style.hat!=='none') {
+    const hat=style.hat;
+    if(hat==='crown') {cylinder(body,.28,.28,.14,'#ffd23d',0,2.12,0);for(let i=0;i<6;i++){const a=i*Math.PI/3;cylinder(body,0,.075,.18,'#ffd23d',Math.cos(a)*.22,2.26,Math.sin(a)*.22,4);}}
+    else if(hat==='tophat'||hat==='top hat') {cylinder(body,.36,.36,.06,'#282827',0,2.1,0);cylinder(body,.24,.24,.35,'#282827',0,2.29,0);}
+    else {sphere(body,.3,top,0,2.06,0,1,.6,1);if(hat==='cap')box(body,.34,.04,.3,top,0,2.08,.22);}
+  }
+  root.userData={body,joints,mouth};return root;
+}
+function updatePlayer() {
+  const old=player;player=createCharacter(identity.style);limbs=player.userData.joints;
+  if(old){player.position.copy(old.position);player.rotation.copy(old.rotation);scene.remove(old);}scene.add(player);
+  if(state.screen==='ready')player.rotation.y=.1;
 }
 
-function renderMarketRoute() {
-  marketRoute.replaceChildren(...MARKET_STAGES.map((market, index) => {
-    const item = document.createElement('li');
-    item.textContent = market.name;
-    item.dataset.stage = String(index);
-    return item;
-  }));
+function wheels(parent,length,width) {
+  const list=[];
+  for(const x of [-length*.33,length*.33])for(const z of [-width*.49,width*.49]) {
+    const wheel=cylinder(parent,.29,.29,.16,'#20211f',x,.31,z,12);wheel.rotation.x=Math.PI/2;list.push(wheel);
+    const hub=cylinder(parent,.105,.105,.17,'#66655c',x,.31,z,10);hub.rotation.x=Math.PI/2;
+  }return list;
+}
+function makeVehicle(kind='danfo',color='#eebd24') {
+  const g=new THREE.Group();let length;
+  if(kind==='danfo') {
+    length=4.1;box(g,4.1,.91,1.65,color,0,.9,0);box(g,3.85,.7,1.6,color,-.1,1.58,0);box(g,3.3,.08,1.32,'#bd8f25',-.1,1.98,0);
+    for(const z of [-.811,.811]) {
+      box(g,3.55,.47,.025,'#253936',-.08,1.63,z);
+      for(let i=0;i<5;i++)box(g,.055,.49,.04,color,-1.65+i*.72,1.63,z);
+      box(g,4.12,.11,.034,'#23251e',0,1.02,z*1.03);box(g,4.12,.085,.034,'#23251e',0,.69,z*1.03);
+    }
+    box(g,.026,.48,1.38,'#8baba5',2.06,1.58,0);box(g,.06,.18,1.14,'#252824',2.1,.8,0);
+    for(const z of [-.59,.59])box(g,.07,.17,.23,'#fff2b2',2.11,1.01,z);
+    box(g,4.25,.13,1.74,'#33352e',0,.51,0);box(g,.1,.21,.34,'#fff0c9',2.14,.56,0);
+    // Passenger door is a recessed panel, attached to the vehicle.
+    box(g,.82,.88,.035,'#d6a41d',.95,1.15,.845);box(g,.65,.37,.04,'#304b46',.95,1.58,.87);
+  } else if(kind==='keke') {
+    length=2.4;box(g,2.4,.63,1.4,color,0,.72,0);box(g,1.65,.16,1.45,'#242820',-.26,1.83,0);
+    for(const x of [-1,.48])for(const z of [-.63,.63])box(g,.055,.93,.055,'#242820',x,1.36,z);
+    box(g,.06,.52,1.17,'#8ab0a8',.53,1.36,0);box(g,.74,.54,1.15,color,.93,1.02,0);
+    for(const z of [-.72,.72])box(g,2.35,.09,.025,'#f5c72d',0,.81,z);
+  } else {
+    length=2;box(g,1.65,.23,.4,'#cf4434',0,.66,0);box(g,.45,.38,.42,'#242725',-.3,.95,0);box(g,.06,.65,.08,'#33352b',.64,1.12,0);
+    const rider=createCharacter({body:'male',primaryColor:color,secondaryColor:'#33382e',hair:'short'},.62);rider.position.set(-.12,.44,0);rider.rotation.y=Math.PI/2;g.add(rider);
+  }
+  const wheelList=wheels(g,length,kind==='okada'?.45:kind==='keke'?1.4:1.65);
+  g.userData={length,wheels:wheelList,kind};return g;
+}
+function makeEyo() {
+  const g=new THREE.Group();cylinder(g,.18,.5,1.5,'#fff7df',0,.85,0,12);sphere(g,.23,'#fff8e9',0,1.69,0);
+  cylinder(g,.51,.51,.045,'#fff8e9',0,1.99,0);cylinder(g,.04,.23,.4,'#fff8e9',0,2.16,0);
+  for(const x of [-.08,.08])sphere(g,.025,'#302f26',x,1.75,.2);
+  const staff=cylinder(g,.026,.026,2.1,'#b79b54',.52,1.05,0,8);staff.rotation.z=-.13;
+  for(const x of [-.27,.27]){const arm=cylinder(g,.06,.1,.65,'#fff7df',x,1.28,0);arm.rotation.z=x<0?.7:-.7;}
+  return g;
+}
+function makeSuya() {
+  const g=new THREE.Group();const tray=cylinder(g,.36,.3,.055,'#ddd2b6',0,.12,0,12);tray.scale.z=.68;
+  for(let s=0;s<2;s++) {
+    const skewer=cylinder(g,.015,.015,.91,'#c99f60',(s-.5)*.21,.24,0,6);skewer.rotation.x=Math.PI/2;
+    for(let i=0;i<4;i++){const meat=box(g,.19,.14,.15,i%2?'#7b3c22':'#aa4a26',(s-.5)*.21,.26,-.26+i*.17);meat.rotation.y=(i%2)*.3;box(g,.12,.018,.025,'#dc873b',(s-.5)*.21,.34,-.26+i*.17);}
+  }
+  for(let i=0;i<3;i++) sphere(g,.065,'#e3d2a9',.21,.21,.1+i*.08,1,.3,1);
+  return g;
+}
+function barrel(parent,x,z) {
+  cylinder(parent,.39,.39,.95,'#297f9d',x,.5,z,12);
+  cylinder(parent,.41,.41,.09,'#226c87',x,.17,z,12);cylinder(parent,.41,.41,.09,'#226c87',x,.78,z,12);
+  cylinder(parent,.29,.29,.035,'#194b5d',x,1,z,12);
+}
+function stall(parent,x,z,index) {
+  const g=new THREE.Group();g.position.set(x,0,z);parent.add(g);
+  const market=MARKETS[Math.min(18,Math.floor(Math.max(0,index)/20))],accent=market[2];
+  for(const px of [-1.2,1.2])for(const pz of [-.65,.65])box(g,.09,2.35,.09,'#695034',px,1.18,pz);
+  const roof=box(g,2.9,.15,1.95,accent,0,2.45,0);roof.rotation.x=-.11;
+  for(let i=0;i<5;i++)box(g,.23,.16,1.95,'#f7c96c',-1.25+i*.57,2.51,0);
+  box(g,2.65,.12,1.6,'#895637',0,1.02,0);box(g,2.5,.85,1.32,'#9a653c',0,.53,0);
+  const label=index%8===0?'MAMA PUT':index%4===0?'SUYA SPOT':market[1];sign(g,label,0,1.87,.77,2.35);
+  for(let i=0;i<6;i++)sphere(g,.13,i%2?'#d84526':'#7d9a3b',-.95+i*.37,1.17,.12,1,.7,1);
+}
+function tree(parent,x,z) {
+  cylinder(parent,.1,.15,2,'#785333',x,1,z,7);sphere(parent,1,'#63833b',x,2.5,z,1,.8,1);
+  sphere(parent,.7,'#7c9647',x+.4,2.85,z-.2);
+}
+function safeRow(index) { return index<=1 || index%5===0 || index%5===1; }
+function random(index,salt=0) { const v=Math.sin(index*127.1+salt*311.7+42.3)*43758.5453;return v-Math.floor(v); }
+
+function addRow(index) {
+  const group=new THREE.Group();group.position.z=-index*STEP_Z;group.userData.index=index;world.add(group);rows.set(index,group);
+  const safe=safeRow(index), z=-index*STEP_Z;
+  const floor=box(group,120,.18,STEP_Z+.01,safe?(index%2?'#c56636':'#bf592e'):'#49483e',0,-.1,0);floor.castShadow=false;
+  if(!safe) {
+    for(let x=-29;x<=29;x+=3.8){const dash=box(group,1.65,.018,.065,'#fff0c8',x,.004,0);dash.castShadow=false;}
+    const direction=index%2?1:-1,kind=index%4===0?'keke':index%3===0?'okada':'danfo';
+    const speed=(2.2+random(index,4)*1.5)*(1+Math.min(18,Math.floor(index/20))*.07);
+    const count=index<8?2:3;
+    for(let v=0;v<count;v++) {
+      const obj=makeVehicle(kind,kind==='danfo'?'#edb91c':v%2?'#258c48':'#237cb0');
+      obj.position.set(-25+v*(50/count)+random(index,7)*5,0,z);obj.rotation.y=direction<0?Math.PI:0;world.add(obj);
+      vehicles.push({obj,row:index,direction,speed,length:obj.userData.length});
+    }
+  } else {
+    // Kerbs sit at ground level between actual roads, with clear open walking space.
+    for(const edge of [-1,1]) if(!safeRow(index+edge))box(group,120,.09,.12,'#e6c999',0,.015,edge*-STEP_Z/2);
+    for(const side of [-1,1]) {
+      if(index%5===0){stall(group,side*(12+random(index,3)*2),0,index);tree(group,side*18,.3);}
+      if(index%5===1)barrel(group,side*11,.25);
+    }
+    if(index>5&&index%10===5) {
+      const obj=makeEyo();obj.position.set((random(index,6)-.5)*13,0,z);world.add(obj);walkers.push({obj,row:index,direction:index%2?1:-1,speed:.7+Math.floor(index/20)*.04});
+    }
+    if(index>2&&index%5===1) {
+      const column=(Math.floor(random(index,8)*9)-4);barrel(group,column*STEP_X,.1);obstacles.push({row:index,column});
+    }
+    if(index%20===0) {
+      const market=MARKETS[Math.min(18,Math.floor(Math.max(0,index)/20))];
+      box(group,.12,2.8,.12,'#735539',-8,1.4,-.8);box(group,.12,2.8,.12,'#735539',-4,1.4,-.8);
+      sign(group,market[0].toUpperCase(),-6,2.52,-.8,4.5);sign(group,market[1],-6,1.85,-.8,3.25,'#f5e4be');
+    }
+  }
+  if(index>=1&&index%2===1) {
+    const column=index===1?0:Math.floor(random(index,2)*9)-4;
+    if(!obstacles.some(o=>o.row===index&&o.column===column)) {
+      const obj=makeSuya();obj.position.set(column*STEP_X,.3,z);world.add(obj);collectibles.push({obj,row:index,column,collected:false});
+    }
+  }
+}
+function discardRow(index) {
+  const group=rows.get(index);if(!group)return;
+  group.traverse(obj=>{for(const t of obj.userData.textures||[])t.dispose();if(obj.material?.map)obj.material.dispose();});
+  world.remove(group);rows.delete(index);
+  for(const list of [vehicles,walkers,collectibles])for(let i=list.length-1;i>=0;i--)if(list[i].row===index){world.remove(list[i].obj);list.splice(i,1);}
+  for(let i=obstacles.length-1;i>=0;i--)if(obstacles[i].row===index)obstacles.splice(i,1);
+}
+function ensureWorld() {
+  for(let r=Math.max(-4,state.furthest-7);r<=state.furthest+20;r++)if(!rows.has(r))addRow(r);
+  for(const r of rows.keys())if(r<state.furthest-7)discardRow(r);
 }
 
-function updateMarketStage(force = false) {
-  const nextIndex = stageForDistance(state.distance);
-  if (!force && nextIndex === state.marketIndex) return;
-  state.marketIndex = nextIndex;
-  const market = currentMarket();
-  stageValue.textContent = market.short;
-  stageName.textContent = market.name;
-  stageBanner.classList.remove('hidden');
-  state.stageBannerTimer = force ? 1.2 : 2.2;
-  document.querySelectorAll('.market-route li').forEach((item) => item.classList.toggle('current', Number(item.dataset.stage) === state.marketIndex));
+function playTone(frequency=430,length=.065) {
+  if(!soundOn)return;
+  try {audio??=new AudioContext();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.setValueAtTime(frequency,audio.currentTime);o.frequency.exponentialRampToValueAtTime(frequency*.72,audio.currentTime+length);g.gain.setValueAtTime(.035,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+length);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+length);}catch{/* Audio is optional. */}
 }
-
-function fallbackFace() {
-  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="24" fill="#252d49"/><circle cx="50" cy="42" r="20" fill="#d99572"/><path d="M29 39c4-25 40-30 47-2-13-9-33-7-47 2Z" fill="#292039"/><path d="M35 69c6-9 24-9 30 0" fill="none" stroke="#ffb454" stroke-width="5" stroke-linecap="round"/></svg>`);
+function refreshHUD() {
+  $('#hops-value').textContent=state.hops;$('#suya-value').textContent=state.suya;
+  $('#market-value').textContent=MARKETS[state.market][0];$('#stage-value').textContent=`${String(state.market+1).padStart(2,'0')} / 19`;
+  $('#best-value').textContent=`${state.best} hops`;
+  document.querySelectorAll('#market-route li').forEach((li,i)=>li.classList.toggle('current',i===state.market));
+  // These canvas attributes also make current movement and score inspectable to assistive tools.
+  canvas.dataset.row=state.row;canvas.dataset.column=state.column;canvas.dataset.screen=state.screen;
 }
-
-function updateIdentity(reply) {
-  const player = reply?.user ?? reply?.guest;
-  currentIdentity = { ...player, signedIn: Boolean(reply?.user) };
-  $('#player-face').src = player?.face || fallbackFace();
-  $('#player-name').textContent = player?.name || 'Guest';
-  $('#player-account').textContent = reply?.user?.account ? `@${reply.user.account}` : 'Play as guest';
-  $('#sign-in-button').hidden = Boolean(reply?.user);
-}
-
-async function loadIdentity() {
-  const reply = await askStartNg({ type:'startng:whoami' }, 'startng:user');
-  updateIdentity(reply || { guest:{ name:'Guest', style:{} } });
-}
-
-function signIn() {
-  const returnTo = `${location.origin}${location.pathname}`;
-  location.href = `${START_NG}/?return_to=${encodeURIComponent(returnTo)}`;
-}
-
-function setupAudio() {
-  if (!soundOn) return;
-  audioContext ??= new AudioContext();
-  const oscillator = audioContext.createOscillator();
-  const gain = audioContext.createGain();
-  oscillator.type = 'sine'; oscillator.frequency.value = 420;
-  gain.gain.setValueAtTime(.045, audioContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(.001, audioContext.currentTime + .09);
-  oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(); oscillator.stop(audioContext.currentTime + .1);
-}
-
-function move(direction) {
-  if (state.screen !== 'playing') return;
-  state.targetLane = Math.max(0, Math.min(2, state.targetLane + direction));
-  setupAudio();
-}
-
-function pauseToggle() {
-  if (state.screen === 'playing') { state.screen = 'paused'; pauseBadge.classList.remove('hidden'); runStatus.textContent = 'Paused'; }
-  else if (state.screen === 'paused') { state.screen = 'playing'; pauseBadge.classList.add('hidden'); runStatus.textContent = 'Dodging the rush'; state.lastTime = performance.now(); canvas.focus(); }
-}
-
 function startRun() {
-  state.screen = 'playing'; state.lane = 1; state.targetLane = 1; state.distance = 0; state.lanterns = 0; state.speed = 260; state.elapsed = 0; state.objects = []; state.spawnTimer = .35; state.lastTime = performance.now(); state.marketIndex = 0;
-  updateMarketStage(true);
-  titleOverlay.classList.add('hidden'); gameoverOverlay.classList.add('hidden'); pauseBadge.classList.add('hidden'); runStatus.textContent = 'Dodging the rush'; canvas.focus(); setupAudio();
+  for(const r of [...rows.keys()])discardRow(r);
+  Object.assign(state,{screen:'playing',row:0,column:0,furthest:0,hops:0,suya:0,market:0,hop:null,queued:null,pointerTarget:null,bannerUntil:0});
+  player.position.set(0,0,0);player.rotation.set(0,Math.PI,0);cameraZ=-1;
+  ensureWorld();
+  for(const id of ['title-overlay','gameover-overlay','pause-overlay','stage-banner'])$('#'+id).classList.add('hidden');
+  $('#move-hint').classList.remove('hidden');$('#touch-controls').classList.remove('hidden');
+  $('#pause-button').textContent='Ⅱ';$('#pause-button').setAttribute('aria-label','Pause game');
+  refreshHUD();canvas.focus();playTone();
 }
-
-function endRun() {
-  state.screen = 'gameover'; state.shake = .2;
-  const distance = Math.floor(state.distance);
-  if (distance > state.best) { state.best = distance; localStorage.setItem('lagos-market-run-best', String(distance)); }
-  $('#final-distance').textContent = `${distance}m`; $('#final-lanterns').textContent = String(state.lanterns);
-  $('#gameover-title').textContent = distance > 700 ? 'That was a legendary shift.' : 'The market wins this round.';
-  $('#save-message').textContent = currentIdentity?.signedIn ? 'Sending your best run to the start.ng board…' : 'Your best run is saved locally. Sign in to enter the global board.';
-  gameoverOverlay.classList.remove('hidden'); runStatus.textContent = 'Run complete'; setupAudio();
-  saveScore(distance, state.lanterns);
-  loadLeaderboard();
+function move(direction) {
+  if(state.screen!=='playing')return;
+  if(state.hop){state.queued=direction;return;}
+  const dx=direction==='left'?-1:direction==='right'?1:0,drow=direction==='up'?1:direction==='down'?-1:0;
+  const column=state.column+dx,row=state.row+drow;
+  if(column<-BOUND||column>BOUND||row<Math.max(0,state.furthest-5)||obstacles.some(o=>o.row===row&&o.column===column)) {playTone(160);state.pointerTarget=null;return;}
+  state.hop={from:player.position.clone(),to:new THREE.Vector3(column*STEP_X,0,-row*STEP_Z),time:0,duration:drow?.23:.19,row,column};
+  player.rotation.y=dx>0?Math.PI/2:dx<0?-Math.PI/2:drow>0?Math.PI:0;
+  playTone(350+random(row,column)*110);
 }
-
-async function saveScore(distance, lanterns) {
-  const saved = await askStartNg({ type:'startng:score', stats:{ distance, lanterns } }, 'startng:scoreSaved');
-  if (saved?.ok) $('#save-message').textContent = saved.result?.improved ? `New best! You are #${saved.result.rank}.` : `Run logged. Your board rank is #${saved.result.rank}.`;
+function finishRun(reason) {
+  if(state.screen!=='playing')return;state.screen='gameover';state.hop=null;state.queued=null;state.pointerTarget=null;
+  state.best=Math.max(state.best,state.hops);localStorage.setItem('lagos-market-run-best-3d',state.best);
+  $('#gameover-title').textContent=reason==='eyo'?'Give Eyo some space!':'Mind the '+reason+'!';
+  $('#final-hops').textContent=state.hops;$('#final-suya').textContent=state.suya;
+  $('#save-message').textContent=signedIn?'Saving your market run…':'Best saved on this device. Sign in for the global board.';
+  $('#gameover-overlay').classList.remove('hidden');$('#move-hint').classList.add('hidden');$('#touch-controls').classList.add('hidden');$('#stage-banner').classList.add('hidden');
+  player.rotation.z=-.35;playTone(120,.25);refreshHUD();saveScore();
 }
-
-async function loadLeaderboard() {
-  const list = $('#leaderboard-list');
-  let entries = [];
-  try {
-    const response = await fetch(`${API}/games/${GAME_NAME}/leaderboard?limit=5`);
-    if (response.ok) entries = await response.json();
-  } catch { /* Local play still works when the board is unavailable. */ }
-  if (!entries.length) { list.innerHTML = '<li class="board-empty">No global runs yet — make the first one.</li>'; return; }
-  list.replaceChildren(...entries.map((entry) => {
-    const item = document.createElement('li');
-    item.innerHTML = `<span class="rank">#${entry.rank}</span><span class="board-name">${escapeHtml(entry.name)}</span><span class="board-score">${entry.stats?.distance ?? entry.score ?? 0}m</span>`;
-    return item;
-  }));
+function togglePause() {
+  if(state.screen==='playing'){state.screen='paused';$('#pause-overlay').classList.remove('hidden');$('#pause-button').setAttribute('aria-label','Resume game');$('#pause-button').textContent='▶';}
+  else if(state.screen==='paused'){state.screen='playing';$('#pause-overlay').classList.add('hidden');$('#pause-button').setAttribute('aria-label','Pause game');$('#pause-button').textContent='Ⅱ';canvas.focus();}
+  refreshHUD();
 }
-
-function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (character) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character])); }
-
-function spawnObject() {
-  const lane = Math.floor(Math.random() * 3);
-  const roll = Math.random();
-  const kind = roll < .34 ? 'suya' : roll < .57 ? 'danfo' : roll < .77 ? 'eyo' : 'handcart';
-  state.objects.push({ lane, y:205, kind, wobble:Math.random() * Math.PI * 2, speedMultiplier:.94 + Math.random() * .14 });
+function enterMarket() {
+  const next=Math.min(18,Math.floor(state.furthest/20));
+  if(next===state.market)return;state.market=next;state.bannerUntil=state.time+2.6;
+  $('#stage-name').textContent=MARKETS[next][0];$('#stage-banner').classList.remove('hidden');playTone(740,.15);
 }
-
 function update(delta) {
-  if (state.screen !== 'playing') return;
-  state.elapsed += delta; state.distance += state.speed * delta * .12; state.speed = Math.min(620, 260 + state.distance * .19 + state.marketIndex * 9);
-  updateMarketStage();
-  if (state.stageBannerTimer > 0) { state.stageBannerTimer -= delta; if (state.stageBannerTimer <= 0) stageBanner.classList.add('hidden'); }
-  state.spawnTimer -= delta;
-  if (state.spawnTimer <= 0) { spawnObject(); state.spawnTimer = Math.max(.3, .82 - state.distance / 5000 - state.marketIndex * .018) + Math.random() * .2; }
-  state.lane += (state.targetLane - state.lane) * Math.min(1, delta * 12);
-  for (const object of state.objects) { object.y += state.speed * delta * object.speedMultiplier; object.wobble += delta * 5; }
-  for (let index = state.objects.length - 1; index >= 0; index -= 1) {
-    const object = state.objects[index];
-    const closeEnough = object.y > playerY - 42 && object.y < playerY + 34 && Math.abs(object.lane - state.lane) < .42;
-    if (closeEnough) { if (object.kind === 'suya') { state.lanterns += 1; state.objects.splice(index,1); setupAudio(); } else { endRun(); return; } }
-    else if (object.y > H + 60) state.objects.splice(index,1);
+  const animated=state.screen==='playing'||state.screen==='ready';
+  if(animated) {
+    state.time+=delta;
+    for(const vehicle of vehicles) {
+      vehicle.obj.position.x+=vehicle.direction*vehicle.speed*delta;
+      if(vehicle.obj.position.x>32)vehicle.obj.position.x=-32;
+      if(vehicle.obj.position.x<-32)vehicle.obj.position.x=32;
+      for(const wheel of vehicle.obj.userData.wheels)wheel.rotation.y+=delta*vehicle.speed;
+    }
+    for(const w of walkers){w.obj.position.x+=w.direction*w.speed*delta;if(Math.abs(w.obj.position.x)>9)w.direction*=-1;w.obj.rotation.z=Math.sin(state.time*4)*.035;}
+    for(const c of collectibles)if(!c.collected){c.obj.rotation.y=state.time*.65;c.obj.position.y=.25+Math.sin(state.time*3+c.row)*.07;}
   }
-  distanceValue.textContent = `${Math.floor(state.distance)}m`; lanternValue.textContent = String(state.lanterns); bestValue.textContent = `${Math.max(state.best, Math.floor(state.distance))}m`;
-}
-
-function roundRect(x,y,w,h,r,fill,stroke) { ctx.beginPath(); ctx.roundRect(x,y,w,h,r); if (fill) { ctx.fillStyle=fill; ctx.fill(); } if (stroke) { ctx.strokeStyle=stroke; ctx.stroke(); } }
-function roadLaneX(lane, y) {
-  const progress = Math.max(0, Math.min(1, (y - 201) / (H - 201)));
-  const horizon = [456, 480, 504][lane];
-  const foreground = laneX[lane];
-  return horizon + (foreground - horizon) * progress;
-}
-function roadScale(y) { return .38 + Math.max(0, Math.min(1, (y - 201) / (H - 201))) * .9; }
-
-function drawBackground() {
-  const market = currentMarket();
-  ctx.fillStyle='#bf572f'; ctx.fillRect(0,0,W,H);
-  for (let band=0; band<7; band+=1) { ctx.fillStyle=band%2 ? '#c96537' : '#ba522e'; ctx.fillRect(0,band*86,W,86); }
-  ctx.fillStyle='rgba(255,219,154,.17)'; for (let line=0; line<7; line+=1) ctx.fillRect(0,line*86+73,W,4);
-  ctx.fillStyle='#f5c56b'; ctx.beginPath(); ctx.arc(790,86,38,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#202020'; ctx.lineWidth=4; ctx.stroke();
-  drawMarketBuilding(18,120,122,105,'#236b8c'); drawMarketBuilding(820,106,118,115,'#e0a62c');
-  drawRoadStrip(0,55,960,92,'#2f3635',18); drawRoadStrip(0,205,960,82,'#343938',18);
-  drawStreetSign(42,164,market.sign); drawStreetSign(704,160,market.short.toUpperCase() + ' MARKET');
-  drawStall(28,287,176,market.glow,'#f4ca3b',market.left); drawStall(754,280,180,'#197a9d','#f4ca3b',market.right);
-  ctx.fillStyle='#85402d'; ctx.beginPath(); ctx.moveTo(175,540); ctx.lineTo(345,295); ctx.lineTo(615,295); ctx.lineTo(785,540); ctx.closePath(); ctx.fill();
-  const road = ctx.createLinearGradient(0,295,0,540); road.addColorStop(0,'#4e5046'); road.addColorStop(1,'#262c2c'); ctx.fillStyle=road; ctx.beginPath(); ctx.moveTo(345,295); ctx.lineTo(615,295); ctx.lineTo(785,540); ctx.lineTo(175,540); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle='#f4e2b5'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(345,295); ctx.lineTo(175,540); ctx.moveTo(615,295); ctx.lineTo(785,540); ctx.stroke();
-  const offset = (state.distance * 1.5) % 58; ctx.strokeStyle='#f9e7b8'; ctx.lineWidth=4; ctx.setLineDash([28,30]); ctx.lineDashOffset=-offset; for (const x of [405,555]) { ctx.beginPath(); ctx.moveTo(480,300); ctx.lineTo(x,540); ctx.stroke(); } ctx.setLineDash([]);
-  ctx.fillStyle='#202020'; ctx.font='900 11px monospace'; ctx.fillText('LAGOS MARKET RUN · ' + market.short.toUpperCase(),28,32); ctx.fillText(`${Math.floor(state.speed)} KM/H`,W-90,32);
-}
-
-function drawMarketBuilding(x,y,width,height,color) {
-  ctx.fillStyle='rgba(33,24,20,.34)'; ctx.fillRect(x+8,y+9,width,height); ctx.fillStyle=color; ctx.fillRect(x,y,width,height); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.strokeRect(x,y,width,height); ctx.fillStyle='#f4ca3b'; for (let row=0;row<2;row+=1) for (let column=0;column<3;column+=1) ctx.fillRect(x+12+column*31,y+18+row*30,12,10);
-}
-function drawRoadStrip(x,y,width,height,roadColor,markOffset) {
-  ctx.fillStyle='#d99058'; ctx.fillRect(x,y,width,height); ctx.strokeStyle='#202020'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(x,y+3); ctx.lineTo(x+width,y+3); ctx.moveTo(x,y+height-3); ctx.lineTo(x+width,y+height-3); ctx.stroke(); ctx.fillStyle=roadColor; ctx.fillRect(x,y+14,width,height-28); ctx.strokeStyle='#f9e7b8'; ctx.lineWidth=3; ctx.setLineDash([34,26]); ctx.lineDashOffset=-(state.distance+markOffset)%60; ctx.beginPath(); ctx.moveTo(x,y+height/2); ctx.lineTo(x+width,y+height/2); ctx.stroke(); ctx.setLineDash([]);
-}
-function drawStreetSign(x,y,label) {
-  ctx.fillStyle='#202020'; ctx.fillRect(x+4,y+10,5,42); ctx.fillRect(x+label.length*6+25,y+10,5,42); ctx.fillStyle='#f4ca3b'; ctx.fillRect(x,y,label.length*6+30,28); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.strokeRect(x,y,label.length*6+30,28); ctx.fillStyle='#202020'; ctx.font='900 9px monospace'; ctx.fillText(label,x+8,y+18);
-}
-function drawStall(x,y,width,awningColor,signColor,label) {
-  ctx.fillStyle='rgba(33,24,20,.4)'; ctx.fillRect(x+10,y+17,width,90); ctx.fillStyle='#5a3426'; ctx.fillRect(x+18,y+43,width-36,64); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.strokeRect(x+18,y+43,width-36,64); ctx.fillStyle=awningColor; ctx.beginPath(); ctx.moveTo(x,y+10); ctx.lineTo(x+width,y+10); ctx.lineTo(x+width-15,y+44); ctx.lineTo(x+15,y+44); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.stroke(); ctx.strokeStyle='rgba(255,240,194,.5)'; ctx.lineWidth=2; for(let stripe=x+18; stripe<x+width-10; stripe+=28){ctx.beginPath();ctx.moveTo(stripe,y+12);ctx.lineTo(stripe+12,y+41);ctx.stroke();} ctx.fillStyle=signColor; ctx.font='900 11px monospace'; ctx.fillText(label,x+26,y+75); ctx.fillStyle='#f4ca3b'; ctx.fillRect(x+25,y+88,8,8); ctx.fillRect(x+49,y+88,8,8); ctx.fillRect(x+73,y+88,8,8);
-}
-
-function drawSuya(object) {
-  const x=roadLaneX(object.lane, object.y); const y=object.y + Math.sin(object.wobble)*2; const scale=roadScale(object.y); ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale); ctx.shadowBlur=18; ctx.shadowColor='#ff8b3d';
-  ctx.fillStyle='rgba(10,16,17,.55)'; ctx.beginPath(); ctx.ellipse(0,24,30,8,0,0,Math.PI*2); ctx.fill();
-  ctx.shadowBlur=0; ctx.fillStyle='#d8d0bc'; ctx.beginPath(); ctx.ellipse(0,13,30,8,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#f6f0db'; ctx.beginPath(); ctx.ellipse(0,10,27,7,0,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='#c49855'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-26,-22); ctx.lineTo(27,11); ctx.moveTo(-14,-28); ctx.lineTo(32,2); ctx.stroke();
-  const chunks=[[-17,-16,7,6],[-5,-10,8,7],[8,-3,7,7],[20,5,6,6]]; chunks.forEach(([chunkX,chunkY,width,height],index)=>{ ctx.fillStyle=index%2?'#8e3a24':'#aa4925'; ctx.beginPath(); ctx.roundRect(chunkX,chunkY,width,height,2); ctx.fill(); ctx.fillStyle='rgba(255,210,125,.68)'; ctx.fillRect(chunkX+2,chunkY+2,width-4,1); });
-  ctx.fillStyle='#b67b3a'; ctx.font='700 7px monospace'; ctx.fillText('SUYA',-16,31); ctx.fillStyle='#e85d45'; for(let pepper=0;pepper<8;pepper+=1){ctx.fillRect(-20+pepper*5,-18+(pepper%3)*7,2,2);} ctx.restore();
-}
-function drawDanfo(object) {
-  const x=roadLaneX(object.lane, object.y); const y=object.y; const scale=roadScale(object.y); ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
-  ctx.fillStyle='rgba(10,16,17,.6)'; ctx.beginPath(); ctx.ellipse(0,28,46,10,0,0,Math.PI*2); ctx.fill();
-  ctx.lineWidth=4; roundRect(-38,-31,76,50,9,'#efbd32','#202020'); roundRect(-32,-25,64,25,4,'#246079','#202020');
-  ctx.fillStyle='#b9e9e7'; ctx.fillRect(-25,-21,18,14); ctx.fillRect(7,-21,18,14); ctx.fillStyle='#f8e5a6'; ctx.fillRect(-32,1,64,8); ctx.fillStyle='#d64b32'; ctx.fillRect(-32,10,64,6); ctx.fillStyle='#2e8f62'; ctx.fillRect(-32,16,64,4);
-  ctx.fillStyle='#151e22'; ctx.beginPath(); ctx.arc(-24,21,9,0,Math.PI*2); ctx.arc(24,21,9,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#8d9aa0'; ctx.beginPath(); ctx.arc(-24,21,3,0,Math.PI*2); ctx.arc(24,21,3,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#202020'; ctx.font='900 8px monospace'; ctx.fillText('DANFO',-21,-37); ctx.fillStyle='#f4ca3b'; ctx.fillRect(-33,-3,4,8); ctx.fillRect(29,-3,4,8); ctx.restore();
-}
-function drawEyo(object) {
-  const x=roadLaneX(object.lane, object.y); const y=object.y; const scale=roadScale(object.y); ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
-  ctx.fillStyle='rgba(10,16,17,.55)'; ctx.beginPath(); ctx.ellipse(0,28,26,8,0,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='#f9f7e9'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(20,-42); ctx.lineTo(30,28); ctx.stroke(); ctx.fillStyle='#d8fd71'; ctx.beginPath(); ctx.arc(30,-45,7,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#f9f7e9'; ctx.beginPath(); ctx.moveTo(-16,18); ctx.lineTo(-24,-17); ctx.quadraticCurveTo(-22,-38,0,-42); ctx.quadraticCurveTo(22,-38,24,-17); ctx.lineTo(16,18); ctx.quadraticCurveTo(0,27,-16,18); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#d8d2bc'; ctx.beginPath(); ctx.arc(0,-48,12,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#f9f7e9'; ctx.beginPath(); ctx.moveTo(-17,-51); ctx.lineTo(-11,-70); ctx.lineTo(0,-80); ctx.lineTo(11,-70); ctx.lineTo(17,-51); ctx.closePath(); ctx.fill();
-  ctx.fillStyle='#2b3b43'; ctx.beginPath(); ctx.arc(-4,-49,2,0,Math.PI*2); ctx.arc(4,-49,2,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#e85d45'; ctx.fillRect(-10,-36,20,3); ctx.fillStyle='#d7b64a'; ctx.font='700 7px monospace'; ctx.fillText('EYO',-11,35); ctx.restore();
-}
-function drawHandcart(object) {
-  const x=roadLaneX(object.lane, object.y); const y=object.y; const scale=roadScale(object.y); ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale); ctx.fillStyle='rgba(10,16,17,.55)'; ctx.beginPath(); ctx.ellipse(0,22,35,7,0,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#c98f52'; ctx.lineWidth=5; ctx.strokeRect(-27,-18,54,31); ctx.beginPath(); ctx.moveTo(-27,-18); ctx.lineTo(-38,-34); ctx.stroke(); ctx.fillStyle='#e85d45'; ctx.fillRect(-20,-14,40,8); ctx.fillStyle='#151e22'; ctx.beginPath(); ctx.arc(-18,18,7,0,Math.PI*2); ctx.arc(18,18,7,0,Math.PI*2); ctx.fill(); ctx.restore();
-}
-function drawRunner() {
-  const style = currentIdentity?.style || {}; const lower=Math.floor(state.lane); const upper=Math.ceil(state.lane); const progress=state.lane-lower; const x=laneX[lower]+(laneX[upper]-laneX[lower])*progress; ctx.save(); ctx.translate(x,playerY); ctx.shadowBlur=22; ctx.shadowColor=style.primaryColor || '#d8fd71';
-  ctx.fillStyle=style.secondaryColor || '#283252'; ctx.beginPath(); ctx.roundRect(-23,18,20,35,9); ctx.roundRect(3,18,20,35,9); ctx.fill(); ctx.fillStyle=style.primaryColor || '#d8fd71'; ctx.beginPath(); ctx.roundRect(-31,-16,62,48,17); ctx.fill(); ctx.fillStyle=style.skinColor || '#d99572'; ctx.beginPath(); ctx.arc(0,-41,22,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0;
-  const hair=style.hairColor || '#292039'; ctx.fillStyle=hair; if (style.hair === 'afro' || style.hair === 'dreads') { for(let i=-2;i<=2;i+=1){ctx.beginPath();ctx.arc(i*8,-57-Math.abs(i)*2,11,0,Math.PI*2);ctx.fill();} } else if (style.hair !== 'bald') { ctx.beginPath();ctx.arc(0,-51,23,Math.PI,Math.PI*2);ctx.fill(); if(style.hair==='ponytail'){ctx.beginPath();ctx.arc(24,-49,9,0,Math.PI*2);ctx.fill();} }
-  if(style.hat && style.hat !== 'none'){ctx.fillStyle=style.hat==='crown'?'#ffb454':'#27304b'; ctx.beginPath();ctx.roundRect(-25,-64,50,10,5);ctx.fill(); if(style.hat==='crown'){ctx.beginPath();ctx.moveTo(-17,-63);ctx.lineTo(-11,-76);ctx.lineTo(0,-65);ctx.lineTo(10,-76);ctx.lineTo(17,-63);ctx.closePath();ctx.fill();}}
-  ctx.fillStyle='#111729'; ctx.beginPath();ctx.arc(-8,-41,2.5,0,Math.PI*2);ctx.arc(8,-41,2.5,0,Math.PI*2);ctx.fill();
-  if(style.accessory==='glasses'){ctx.strokeStyle='#111729';ctx.lineWidth=2;ctx.strokeRect(-16,-48,13,10);ctx.strokeRect(3,-48,13,10);ctx.beginPath();ctx.moveTo(-3,-44);ctx.lineTo(3,-44);ctx.stroke();} if(style.accessory==='earrings'){ctx.fillStyle='#ffb454';ctx.beginPath();ctx.arc(-20,-32,3,0,Math.PI*2);ctx.arc(20,-32,3,0,Math.PI*2);ctx.fill();} if(style.accessory==='scarf'){ctx.fillStyle='#e85d45';ctx.fillRect(-22,-25,44,8);} if(style.accessory==='backpack'){ctx.fillStyle=style.secondaryColor||'#283252';ctx.fillRect(-36,-9,9,26);ctx.fillRect(27,-9,9,26);} ctx.fillStyle='#ffd27d'; ctx.fillRect(-18,52,14,4); ctx.fillRect(5,52,14,4); ctx.restore();
-}
-
-function draw() {
-  drawBackground();
-  for (const object of state.objects) {
-    if (object.kind === 'suya') drawSuya(object);
-    else if (object.kind === 'danfo') drawDanfo(object);
-    else if (object.kind === 'eyo') drawEyo(object);
-    else drawHandcart(object);
+  if(state.screen==='playing') {
+    if(state.hop) {
+      const hop=state.hop;hop.time+=delta;const t=Math.min(1,hop.time/hop.duration),smooth=t*t*(3-2*t);
+      player.position.lerpVectors(hop.from,hop.to,smooth);player.position.y=Math.sin(t*Math.PI)*.46;
+      const swing=Math.sin(t*Math.PI*2)*.6;limbs.leftLeg.rotation.x=swing;limbs.rightLeg.rotation.x=-swing;limbs.leftArm.rotation.x=-swing;limbs.rightArm.rotation.x=swing;
+      limbs.leftArm.rotation.z=-Math.sin(t*Math.PI)*.3;limbs.rightArm.rotation.z=Math.sin(t*Math.PI)*.3;
+      if(t===1) {
+        state.row=hop.row;state.column=hop.column;state.hop=null;
+        state.furthest=Math.max(state.furthest,state.row);state.hops=state.furthest;
+        for(const limb of Object.values(limbs))limb.rotation.set(0,0,0);
+        if(state.hops>=3)$('#move-hint').classList.add('hidden');
+        enterMarket();ensureWorld();refreshHUD();
+      }
+    }
+    // Collision uses actual 3D ground positions, including during a hop.
+    for(const v of vehicles)if(Math.abs(v.obj.position.z-player.position.z)<.7&&Math.abs(v.obj.position.x-player.position.x)<v.length/2+.2){finishRun(v.obj.userData.kind);break;}
+    if(state.screen==='playing')for(const w of walkers)if(Math.abs(w.obj.position.z-player.position.z)<.65&&Math.abs(w.obj.position.x-player.position.x)<.65){finishRun('eyo');break;}
+    if(state.screen==='playing') {
+      for(const c of collectibles)if(!c.collected&&Math.abs(c.obj.position.z-player.position.z)<.65&&Math.abs(c.obj.position.x-player.position.x)<.65){c.collected=true;c.obj.visible=false;state.suya++;playTone(900,.11);refreshHUD();}
+      if(!state.hop) {
+        if(state.queued){const next=state.queued;state.queued=null;move(next);}
+        else if(state.pointerTarget) {
+          const target=state.pointerTarget;
+          if(target.column!==state.column)move(target.column>state.column?'right':'left');
+          else if(target.row!==state.row)move(target.row>state.row?'up':'down');
+          else state.pointerTarget=null;
+        }
+      }
+    }
+    if(state.bannerUntil&&state.time>state.bannerUntil){$('#stage-banner').classList.add('hidden');state.bannerUntil=0;}
   }
-  drawRunner();
-  if (state.shake > 0) state.shake -= .016;
+  if(state.screen==='ready') { player.position.y=Math.sin(state.time*2)*.025; }
+  const desiredZ=-state.furthest*STEP_Z+(state.screen==='ready'?6:-4.2);
+  cameraZ=THREE.MathUtils.damp(cameraZ,desiredZ,5,delta);
+  camera.position.set(8.8,16,cameraZ+21);camera.lookAt(0,0,cameraZ);
+  sun.position.set(-12,22,cameraZ+10);sun.target.position.set(0,0,cameraZ);sun.target.updateMatrixWorld();
 }
-function frame(time) { const delta=Math.min(.04,(time-state.lastTime)/1000 || 0); state.lastTime=time; update(delta); draw(); requestAnimationFrame(frame); }
+function resize() {
+  const width=innerWidth,height=innerHeight,aspect=width/height;
+  const viewHeight=aspect<.8?27:aspect>1.8?19:23;
+  camera.left=-viewHeight*aspect/2;camera.right=viewHeight*aspect/2;camera.top=viewHeight/2;camera.bottom=-viewHeight/2;camera.updateProjectionMatrix();renderer.setSize(width,height,false);
+}
+function frame(time) {
+  const delta=Math.min(.035,(time-previousTime)/1000||0);previousTime=time;
+  update(delta);renderer.render(scene,camera);requestAnimationFrame(frame);
+}
 
-function handleKeyDown(event) {
-  const key=event.key.toLowerCase();
-  if (event.key==='ArrowLeft' || key==='a' || event.key==='ArrowRight' || key==='d') { event.preventDefault(); event.stopPropagation(); move(event.key==='ArrowLeft' || key==='a' ? -1 : 1); return; }
-  if (key==='p') { event.preventDefault(); pauseToggle(); return; }
-  if (event.key==='Enter' && (state.screen==='ready' || state.screen==='gameover')) { event.preventDefault(); startRun(); }
+// Shared start.ng identity and scores; all origin and frame checks are retained.
+function connectFrame() {
+  framePromise??=new Promise((resolve,reject)=>{const iframe=document.createElement('iframe');iframe.src=START_NG+'/connect';iframe.hidden=true;iframe.onload=()=>resolve(iframe);iframe.onerror=reject;document.body.append(iframe);});return framePromise;
 }
-window.addEventListener('keydown', handleKeyDown, { capture:true });
-canvas.addEventListener('pointerdown', () => canvas.focus());
-function laneFromMouse(event) {
-  const rect = canvas.getBoundingClientRect();
-  const ratio = (event.clientX - rect.left) / rect.width;
-  return Math.max(0, Math.min(2, Math.floor(ratio * 3)));
+async function askStartNg(message,replyType) {
+  try {
+    const iframe=await connectFrame();return await new Promise(resolve=>{
+      const requestId=Math.random().toString(36).slice(2);
+      const done=reply=>{clearTimeout(timer);removeEventListener('message',onMessage);resolve(reply);};
+      function onMessage(event){if(event.origin===START_NG&&event.source===iframe.contentWindow&&event.data?.type===replyType&&event.data.requestId===requestId)done(event.data);}
+      const timer=setTimeout(()=>done(null),3000);addEventListener('message',onMessage);iframe.contentWindow.postMessage({...message,requestId},START_NG);
+    });
+  }catch{return null;}
 }
-canvas.addEventListener('mousemove', (event) => {
-  if (state.screen === 'playing') state.targetLane = laneFromMouse(event);
+async function loadIdentity() {
+  const reply=await askStartNg({type:'startng:whoami'},'startng:user');const next=reply?.user??reply?.guest;
+  if(next){identity=next;signedIn=!!reply.user;updatePlayer();}
+  $('#player-name').textContent=identity.name||'Guest';$('#player-account').textContent=signedIn?'@'+identity.account:'Market explorer';
+  if(identity.face)$('#player-face').src=identity.face;
+  else $('#player-face').src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" fill="#f6c928"/><circle cx="40" cy="38" r="20" fill="#8d5524"/><ellipse cx="40" cy="22" rx="23" ry="14" fill="#17120f"/><path d="M12 80V68Q40 45 68 68V80" fill="#f7b731"/></svg>');
+  $('#sign-in-button').hidden=signedIn;
+  $('#welcome').textContent=signedIn?`Welcome, ${identity.name}! Let's hit the market.`:'Your market adventure starts here.';
+}
+async function saveScore() {
+  if(!signedIn)return;
+  const result=await askStartNg({type:'startng:score',stats:{distance:Math.round(state.hops*12.5),lanterns:state.suya}},'startng:scoreSaved');
+  $('#save-message').textContent=result?.ok?`Best run saved. You're #${result.result?.rank??'—'} on the board.`:'Run saved on this device. The global board is unavailable.';
+}
+async function loadLeaderboard() {
+  const list=$('#leaderboard-list');list.replaceChildren();const loading=document.createElement('li');loading.textContent='Loading the legends…';list.append(loading);
+  try {const response=await fetch(`${API}/games/${GAME_NAME}/leaderboard?limit=8`);if(!response.ok)throw Error('Board unavailable');const entries=await response.json();
+    list.replaceChildren(...entries.map(entry=>{const li=document.createElement('li'),name=document.createElement('span'),score=document.createElement('strong');name.textContent=`#${entry.rank} ${entry.name}`;score.textContent=`${entry.stats?.distance??entry.score??0}m · ${entry.stats?.lanterns??0} suya`;li.append(name,score);return li;}));
+    if(!entries.length){loading.textContent='Be the first Lagos market legend.';list.append(loading);}
+  }catch{loading.textContent='The board is taking a market break. Try again.';}
+}
+
+const keyMap={ArrowUp:'up',w:'up',ArrowDown:'down',s:'down',ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right'};
+window.addEventListener('keydown',event=>{
+  if(document.querySelector('dialog[open]'))return;
+  const key=event.key.length===1?event.key.toLowerCase():event.key;
+  if(keyMap[key]){event.preventDefault();state.pointerTarget=null;move(keyMap[key]);}
+  else if(key==='p'||key==='Escape'){event.preventDefault();togglePause();}
+  else if(key==='Enter'&&(state.screen==='ready'||state.screen==='gameover'))startRun();
+},{capture:true});
+const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2(),ground=new THREE.Plane(new THREE.Vector3(0,1,0),0),intersection=new THREE.Vector3();
+let pointerStart=null;
+canvas.addEventListener('pointerdown',event=>{canvas.focus();pointerStart={x:event.clientX,y:event.clientY};});
+canvas.addEventListener('pointerup',event=>{
+  if(!pointerStart||state.screen!=='playing'){pointerStart=null;return;}
+  const dx=event.clientX-pointerStart.x,dy=event.clientY-pointerStart.y;pointerStart=null;
+  if(Math.max(Math.abs(dx),Math.abs(dy))>24){state.pointerTarget=null;move(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy<0?'up':'down');return;}
+  const rect=canvas.getBoundingClientRect();mouse.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(mouse,camera);
+  if(raycaster.ray.intersectPlane(ground,intersection)) {
+    const column=Math.max(-BOUND,Math.min(BOUND,Math.round(intersection.x/STEP_X))),row=Math.max(Math.max(0,state.furthest-5),Math.min(state.row+4,Math.round(-intersection.z/STEP_Z)));
+    state.pointerTarget={column,row};
+  }
 });
-canvas.addEventListener('click', (event) => {
-  if (state.screen === 'playing') { state.targetLane = laneFromMouse(event); setupAudio(); }
-});
-$('#start-button').addEventListener('click', startRun); $('#restart-button').addEventListener('click', startRun); $('#sign-in-button').addEventListener('click', signIn); $('#leaderboard-button').addEventListener('click', () => $('#board-card').scrollIntoView({ behavior:'smooth', block:'center' })); $('#refresh-board').addEventListener('click', loadLeaderboard); $('#mobile-pause').addEventListener('click', pauseToggle); document.querySelectorAll('[data-lane]').forEach((button) => { button.addEventListener('click', () => { canvas.focus(); move(button.dataset.lane==='left' ? -1 : 1); }); button.addEventListener('pointerdown', (event) => event.preventDefault()); });
-$('#sound-button').addEventListener('click', () => { soundOn=!soundOn; $('#sound-button').textContent=soundOn?'Sound on':'Sound off'; });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadIdentity(); }); window.addEventListener('focus', loadIdentity);
-renderMarketRoute();
-document.querySelector('.market-route li')?.classList.add('current');
-loadIdentity(); loadLeaderboard(); bestValue.textContent=`${state.best}m`; requestAnimationFrame(frame);
+canvas.addEventListener('pointercancel',()=>{pointerStart=null;});
+for(const b of document.querySelectorAll('[data-move]'))b.addEventListener('pointerdown',event=>{event.preventDefault();state.pointerTarget=null;move(b.dataset.move);});
+$('#start-button').onclick=startRun;$('#restart-button').onclick=startRun;$('#pause-button').onclick=togglePause;$('#resume-button').onclick=togglePause;
+$('#home-button').onclick=()=>{state.screen='ready';state.hop=null;player.rotation.set(0,0,0);$('#gameover-overlay').classList.add('hidden');$('#title-overlay').classList.remove('hidden');refreshHUD();};
+$('#sound-button').onclick=()=>{soundOn=!soundOn;$('#sound-button').textContent=soundOn?'♫':'♪';$('#sound-button').setAttribute('aria-label',soundOn?'Mute sound':'Unmute sound');$('#sound-button').style.opacity=soundOn?1:.55;};
+$('#sign-in-button').onclick=()=>{location.href=`${START_NG}/?return_to=${encodeURIComponent(location.origin+location.pathname)}`;};
+let resumeAfterDialog=false;
+for(const b of document.querySelectorAll('[data-open]'))b.onclick=()=>{resumeAfterDialog=state.screen==='playing';if(resumeAfterDialog)togglePause();$('#'+b.dataset.open).showModal();if(b.dataset.open==='board-dialog')loadLeaderboard();};
+for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>b.closest('dialog').close();
+for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('close',()=>{if(resumeAfterDialog&&state.screen==='paused')togglePause();resumeAfterDialog=false;});
+$('#refresh-board').onclick=loadLeaderboard;
+MARKETS.forEach(m=>{const li=document.createElement('li');li.textContent=m[0];$('#market-route').append(li);});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.screen==='playing')togglePause();}else loadIdentity();});
+window.addEventListener('focus',loadIdentity);window.addEventListener('resize',resize);
+canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();if(state.screen==='playing')togglePause();$('#render-error').textContent='The 3D view was interrupted. Reload the page to reopen the market.';$('#render-error').classList.remove('hidden');});
+updatePlayer();ensureWorld();resize();refreshHUD();loadIdentity();$('#loading').classList.add('hidden');requestAnimationFrame(frame);
