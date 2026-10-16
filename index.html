@@ -4,16 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b1020" />
-    <meta name="description" content="Neon Market Dash — a start.ng lane runner." />
-    <title>Neon Market Dash</title>
+    <meta name="description" content="Lagos Market Dash — a start.ng lane runner through a Nigerian night market." />
+    <title>Lagos Market Dash</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <a class="brand" href="./" aria-label="Neon Market Dash home">
+        <a class="brand" href="./" aria-label="Lagos Market Dash home">
           <span class="brand-mark" aria-hidden="true">✦</span>
-          <span>NEON MARKET <em>DASH</em></span>
+          <span>LAGOS MARKET <em>DASH</em></span>
         </a>
         <div class="top-actions">
           <button class="text-button" id="sound-button" type="button" aria-label="Toggle sound">Sound on</button>
@@ -24,13 +24,13 @@
       <section class="game-layout" aria-label="Neon Market Dash game">
         <div class="game-column">
           <div class="game-frame">
-            <canvas id="game-canvas" width="960" height="540" aria-label="Neon Market Dash playfield"></canvas>
+            <canvas id="game-canvas" width="960" height="540" tabindex="0" aria-label="Lagos Market Dash playfield"></canvas>
             <div class="game-overlay" id="title-overlay">
-              <div class="eyebrow">START.NG NIGHT SHIFT</div>
-              <h1>Make it through<br /><span>the market glow.</span></h1>
-              <p>Switch lanes. Grab lanterns. Stay moving.</p>
+              <div class="eyebrow">LAGOS · LAST BUS HOME</div>
+              <h1>Beat the rush<br /><span>before the market closes.</span></h1>
+              <p>Dodge danfos. Grab suya lanterns. Keep your street cred.</p>
               <button class="primary-button" id="start-button" type="button">Start run <span>→</span></button>
-              <div class="control-hint"><kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> to switch lanes</div>
+              <div class="control-hint"><kbd>←</kbd><kbd>→</kbd> or <kbd>A</kbd><kbd>D</kbd> · tap the lane buttons below</div>
             </div>
             <div class="game-overlay hidden" id="gameover-overlay">
               <div class="eyebrow">SHIFT COMPLETE</div>
@@ -45,10 +45,10 @@
             <div class="pause-badge hidden" id="pause-badge">Paused · press P to resume</div>
           </div>
 
-          <div class="mobile-controls" aria-label="Touch controls">
-            <button type="button" data-lane="left" aria-label="Move left">←</button>
-            <button type="button" id="mobile-pause" aria-label="Pause game">Ⅱ</button>
-            <button type="button" data-lane="right" aria-label="Move right">→</button>
+          <div class="mobile-controls" aria-label="Movement controls">
+            <button type="button" data-lane="left" aria-label="Move left">◀ <span>LEFT</span></button>
+            <button type="button" id="mobile-pause" aria-label="Pause game">Ⅱ <span>PAUSE</span></button>
+            <button type="button" data-lane="right" aria-label="Move right"><span>RIGHT</span> ▶</button>
           </div>
 
           <div class="stats-strip" aria-label="Current run stats">
@@ -68,20 +68,20 @@
 
           <div class="how-to-card">
             <div class="card-heading"><span>HOW TO PLAY</span><span class="spark">✦</span></div>
-            <div class="how-row"><span class="how-icon move-icon">↔</span><p><strong>Switch lanes</strong><br />Dodge the market barricades.</p></div>
-            <div class="how-row"><span class="how-icon collect-icon">✦</span><p><strong>Collect lanterns</strong><br />Each one adds to your run.</p></div>
-            <div class="how-row"><span class="how-icon speed-icon">↗</span><p><strong>Go further</strong><br />The pace rises every 250m.</p></div>
+            <div class="how-row"><span class="how-icon move-icon">↔</span><p><strong>Switch lanes</strong><br />Dodge danfos and handcarts.</p></div>
+            <div class="how-row"><span class="how-icon collect-icon">✦</span><p><strong>Collect suya lamps</strong><br />Each one adds to your run.</p></div>
+            <div class="how-row"><span class="how-icon speed-icon">↗</span><p><strong>Beat the rush</strong><br />The street gets faster.</p></div>
           </div>
 
           <div class="board-card" id="board-card">
-            <div class="card-heading"><span>TOP NIGHT SHIFTS</span><button class="tiny-button" id="refresh-board" type="button">Refresh</button></div>
+            <div class="card-heading"><span>TOP MARKET RUNS</span><button class="tiny-button" id="refresh-board" type="button">Refresh</button></div>
             <ol class="leaderboard-list" id="leaderboard-list"><li class="board-empty">Loading the board…</li></ol>
             <p class="board-note">Sign in to save your best run.</p>
           </div>
         </aside>
       </section>
 
-      <footer class="footer-note"><span>Built for the start.ng community</span><span>Tip: the road gets faster, but never unfair.</span></footer>
+      <footer class="footer-note"><span>Built for the start.ng community</span><span>Tip: the last danfo leaves when the lights go out.</span></footer>
     </main>
     <script type="module" src="./game.js"></script>
   </body>
