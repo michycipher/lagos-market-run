@@ -1,6 +1,6 @@
 const START_NG = 'https://start.ng';
 const API = 'https://api.start.ng';
-const GAME_NAME = location.hostname.endsWith('.start.ng') ? location.hostname.split('.')[0] : 'lagos-market-dash';
+const GAME_NAME = location.hostname.endsWith('.start.ng') ? location.hostname.split('.')[0] : 'lagos-market-run';
 
 const MARKET_STAGES = [
   { name:'Balogun Market', short:'Balogun', sign:'FABRICS · LAGOS ISLAND', left:'ANKARA', right:'LACE', sky:'#173243', glow:'#e85d45' },
@@ -64,7 +64,7 @@ const W = canvas.width;
 const H = canvas.height;
 const laneX = [315, 480, 645];
 const playerY = 425;
-const state = { screen:'ready', lane:1, targetLane:1, distance:0, lanterns:0, speed:260, elapsed:0, objects:[], lastTime:0, best:Number(localStorage.getItem('neon-market-best') || 0), spawnTimer:0, shake:0, marketIndex:0, stageBannerTimer:0 };
+const state = { screen:'ready', lane:1, targetLane:1, distance:0, lanterns:0, speed:260, elapsed:0, objects:[], lastTime:0, best:Number(localStorage.getItem('lagos-market-run-best') || 0), spawnTimer:0, shake:0, marketIndex:0, stageBannerTimer:0 };
 
 const $ = (selector) => document.querySelector(selector);
 const distanceValue = $('#distance-value');
@@ -162,7 +162,7 @@ function startRun() {
 function endRun() {
   state.screen = 'gameover'; state.shake = .2;
   const distance = Math.floor(state.distance);
-  if (distance > state.best) { state.best = distance; localStorage.setItem('neon-market-best', String(distance)); }
+  if (distance > state.best) { state.best = distance; localStorage.setItem('lagos-market-run-best', String(distance)); }
   $('#final-distance').textContent = `${distance}m`; $('#final-lanterns').textContent = String(state.lanterns);
   $('#gameover-title').textContent = distance > 700 ? 'That was a legendary shift.' : 'The market wins this round.';
   $('#save-message').textContent = currentIdentity?.signedIn ? 'Sending your best run to the start.ng board…' : 'Your best run is saved locally. Sign in to enter the global board.';
@@ -229,20 +229,32 @@ function roadScale(y) { return .38 + Math.max(0, Math.min(1, (y - 201) / (H - 20
 
 function drawBackground() {
   const market = currentMarket();
-  const sky = ctx.createLinearGradient(0,0,0,H); sky.addColorStop(0,market.sky); sky.addColorStop(.48,'#63402f'); sky.addColorStop(1,'#101a1c'); ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='rgba(255,212,133,.92)'; ctx.beginPath(); ctx.arc(770,88,31,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='rgba(13,25,31,.72)'; ctx.fillRect(0,173,W,4);
-  for (let i=0;i<12;i+=1) { const x=18+i*86; const height=38+(i%4)*20; ctx.fillStyle=i%2?'#1c3841':'#20333b'; ctx.fillRect(x,173-height,66,height); ctx.fillStyle=i%3?'#ffd27d':'#d8fd71'; ctx.globalAlpha=.7; for(let window=0;window<3;window+=1) ctx.fillRect(x+10+window*18,185-height,8,11); ctx.globalAlpha=1; }
-  drawStall(26,170,172,market.glow,'#f6bd45',market.left); drawStall(754,168,180,'#1e8a77','#ffb454',market.right);
-  ctx.fillStyle='#0c1618'; ctx.beginPath(); ctx.moveTo(176,540); ctx.lineTo(354,190); ctx.lineTo(606,190); ctx.lineTo(784,540); ctx.closePath(); ctx.fill();
-  const road = ctx.createLinearGradient(0,190,0,540); road.addColorStop(0,'#38504d'); road.addColorStop(1,'#172426'); ctx.fillStyle=road; ctx.beginPath(); ctx.moveTo(354,190); ctx.lineTo(606,190); ctx.lineTo(784,540); ctx.lineTo(176,540); ctx.closePath(); ctx.fill();
-  const offset = (state.distance * 1.5) % 54; ctx.strokeStyle='rgba(255,210,125,.48)'; ctx.lineWidth=3; ctx.setLineDash([28,25]); ctx.lineDashOffset=-offset; for (const x of [394,566]) { ctx.beginPath(); ctx.moveTo(480,195); ctx.lineTo(x,540); ctx.stroke(); } ctx.setLineDash([]);
-  ctx.strokeStyle='rgba(216,253,113,.42)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(354,190); ctx.lineTo(176,540); ctx.moveTo(606,190); ctx.lineTo(784,540); ctx.stroke();
-  ctx.fillStyle='rgba(255,239,197,.82)'; ctx.font='700 10px monospace'; ctx.fillText(market.sign,330,218); ctx.fillStyle='rgba(255,239,197,.78)'; ctx.font='500 10px monospace'; ctx.fillText('LAGOS MARKET ROUTE · LAST BUS HOME',28,31); ctx.fillText(`${Math.floor(state.speed)} KM/H`,W-86,31);
+  ctx.fillStyle='#bf572f'; ctx.fillRect(0,0,W,H);
+  for (let band=0; band<7; band+=1) { ctx.fillStyle=band%2 ? '#c96537' : '#ba522e'; ctx.fillRect(0,band*86,W,86); }
+  ctx.fillStyle='rgba(255,219,154,.17)'; for (let line=0; line<7; line+=1) ctx.fillRect(0,line*86+73,W,4);
+  ctx.fillStyle='#f5c56b'; ctx.beginPath(); ctx.arc(790,86,38,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#202020'; ctx.lineWidth=4; ctx.stroke();
+  drawMarketBuilding(18,120,122,105,'#236b8c'); drawMarketBuilding(820,106,118,115,'#e0a62c');
+  drawRoadStrip(0,55,960,92,'#2f3635',18); drawRoadStrip(0,205,960,82,'#343938',18);
+  drawStreetSign(42,164,market.sign); drawStreetSign(704,160,market.short.toUpperCase() + ' MARKET');
+  drawStall(28,287,176,market.glow,'#f4ca3b',market.left); drawStall(754,280,180,'#197a9d','#f4ca3b',market.right);
+  ctx.fillStyle='#85402d'; ctx.beginPath(); ctx.moveTo(175,540); ctx.lineTo(345,295); ctx.lineTo(615,295); ctx.lineTo(785,540); ctx.closePath(); ctx.fill();
+  const road = ctx.createLinearGradient(0,295,0,540); road.addColorStop(0,'#4e5046'); road.addColorStop(1,'#262c2c'); ctx.fillStyle=road; ctx.beginPath(); ctx.moveTo(345,295); ctx.lineTo(615,295); ctx.lineTo(785,540); ctx.lineTo(175,540); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#f4e2b5'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(345,295); ctx.lineTo(175,540); ctx.moveTo(615,295); ctx.lineTo(785,540); ctx.stroke();
+  const offset = (state.distance * 1.5) % 58; ctx.strokeStyle='#f9e7b8'; ctx.lineWidth=4; ctx.setLineDash([28,30]); ctx.lineDashOffset=-offset; for (const x of [405,555]) { ctx.beginPath(); ctx.moveTo(480,300); ctx.lineTo(x,540); ctx.stroke(); } ctx.setLineDash([]);
+  ctx.fillStyle='#202020'; ctx.font='900 11px monospace'; ctx.fillText('LAGOS MARKET RUN · ' + market.short.toUpperCase(),28,32); ctx.fillText(`${Math.floor(state.speed)} KM/H`,W-90,32);
 }
 
+function drawMarketBuilding(x,y,width,height,color) {
+  ctx.fillStyle='rgba(33,24,20,.34)'; ctx.fillRect(x+8,y+9,width,height); ctx.fillStyle=color; ctx.fillRect(x,y,width,height); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.strokeRect(x,y,width,height); ctx.fillStyle='#f4ca3b'; for (let row=0;row<2;row+=1) for (let column=0;column<3;column+=1) ctx.fillRect(x+12+column*31,y+18+row*30,12,10);
+}
+function drawRoadStrip(x,y,width,height,roadColor,markOffset) {
+  ctx.fillStyle='#d99058'; ctx.fillRect(x,y,width,height); ctx.strokeStyle='#202020'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(x,y+3); ctx.lineTo(x+width,y+3); ctx.moveTo(x,y+height-3); ctx.lineTo(x+width,y+height-3); ctx.stroke(); ctx.fillStyle=roadColor; ctx.fillRect(x,y+14,width,height-28); ctx.strokeStyle='#f9e7b8'; ctx.lineWidth=3; ctx.setLineDash([34,26]); ctx.lineDashOffset=-(state.distance+markOffset)%60; ctx.beginPath(); ctx.moveTo(x,y+height/2); ctx.lineTo(x+width,y+height/2); ctx.stroke(); ctx.setLineDash([]);
+}
+function drawStreetSign(x,y,label) {
+  ctx.fillStyle='#202020'; ctx.fillRect(x+4,y+10,5,42); ctx.fillRect(x+label.length*6+25,y+10,5,42); ctx.fillStyle='#f4ca3b'; ctx.fillRect(x,y,label.length*6+30,28); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.strokeRect(x,y,label.length*6+30,28); ctx.fillStyle='#202020'; ctx.font='900 9px monospace'; ctx.fillText(label,x+8,y+18);
+}
 function drawStall(x,y,width,awningColor,signColor,label) {
-  ctx.fillStyle='rgba(8,16,18,.55)'; ctx.fillRect(x+10,y+16,width,80); ctx.fillStyle='#3c2e27'; ctx.fillRect(x+18,y+42,width-36,58); ctx.fillStyle=awningColor; ctx.beginPath(); ctx.moveTo(x,y+10); ctx.lineTo(x+width,y+10); ctx.lineTo(x+width-15,y+43); ctx.lineTo(x+15,y+43); ctx.closePath(); ctx.fill(); ctx.strokeStyle='rgba(255,235,180,.32)'; ctx.lineWidth=2; for(let stripe=x+18; stripe<x+width-10; stripe+=28){ctx.beginPath();ctx.moveTo(stripe,y+12);ctx.lineTo(stripe+12,y+41);ctx.stroke();} ctx.fillStyle=signColor; ctx.font='700 11px monospace'; ctx.fillText(label,x+28,y+72); ctx.fillStyle='#ffd27d'; ctx.fillRect(x+25,y+82,7,7); ctx.fillRect(x+47,y+82,7,7); ctx.fillRect(x+69,y+82,7,7);
+  ctx.fillStyle='rgba(33,24,20,.4)'; ctx.fillRect(x+10,y+17,width,90); ctx.fillStyle='#5a3426'; ctx.fillRect(x+18,y+43,width-36,64); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.strokeRect(x+18,y+43,width-36,64); ctx.fillStyle=awningColor; ctx.beginPath(); ctx.moveTo(x,y+10); ctx.lineTo(x+width,y+10); ctx.lineTo(x+width-15,y+44); ctx.lineTo(x+15,y+44); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#202020'; ctx.lineWidth=3; ctx.stroke(); ctx.strokeStyle='rgba(255,240,194,.5)'; ctx.lineWidth=2; for(let stripe=x+18; stripe<x+width-10; stripe+=28){ctx.beginPath();ctx.moveTo(stripe,y+12);ctx.lineTo(stripe+12,y+41);ctx.stroke();} ctx.fillStyle=signColor; ctx.font='900 11px monospace'; ctx.fillText(label,x+26,y+75); ctx.fillStyle='#f4ca3b'; ctx.fillRect(x+25,y+88,8,8); ctx.fillRect(x+49,y+88,8,8); ctx.fillRect(x+73,y+88,8,8);
 }
 
 function drawSuya(object) {
@@ -255,10 +267,10 @@ function drawSuya(object) {
 }
 function drawDanfo(object) {
   const x=roadLaneX(object.lane, object.y); const y=object.y; const scale=roadScale(object.y); ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
-  ctx.fillStyle='rgba(10,16,17,.6)'; ctx.beginPath(); ctx.ellipse(0,26,42,9,0,0,Math.PI*2); ctx.fill();
-  roundRect(-36,-30,72,48,8,'#d7b64a'); roundRect(-30,-24,60,24,4,'#254453');
-  ctx.fillStyle='#b7e7e4'; ctx.fillRect(-24,-20,17,13); ctx.fillRect(7,-20,17,13); ctx.fillStyle='#f7e7a1'; ctx.fillRect(-30,1,60,8); ctx.fillStyle='#e85d45'; ctx.fillRect(-30,10,60,5); ctx.fillStyle='#2d8b68'; ctx.fillRect(-30,15,60,4);
-  ctx.fillStyle='#151e22'; ctx.beginPath(); ctx.arc(-23,20,8,0,Math.PI*2); ctx.arc(23,20,8,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#8d9aa0'; ctx.beginPath(); ctx.arc(-23,20,3,0,Math.PI*2); ctx.arc(23,20,3,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#101d22'; ctx.font='700 8px monospace'; ctx.fillText('DANFO',-21,-35); ctx.fillStyle='#ffd27d'; ctx.fillRect(-31,-3,3,7); ctx.fillRect(28,-3,3,7); ctx.restore();
+  ctx.fillStyle='rgba(10,16,17,.6)'; ctx.beginPath(); ctx.ellipse(0,28,46,10,0,0,Math.PI*2); ctx.fill();
+  ctx.lineWidth=4; roundRect(-38,-31,76,50,9,'#efbd32','#202020'); roundRect(-32,-25,64,25,4,'#246079','#202020');
+  ctx.fillStyle='#b9e9e7'; ctx.fillRect(-25,-21,18,14); ctx.fillRect(7,-21,18,14); ctx.fillStyle='#f8e5a6'; ctx.fillRect(-32,1,64,8); ctx.fillStyle='#d64b32'; ctx.fillRect(-32,10,64,6); ctx.fillStyle='#2e8f62'; ctx.fillRect(-32,16,64,4);
+  ctx.fillStyle='#151e22'; ctx.beginPath(); ctx.arc(-24,21,9,0,Math.PI*2); ctx.arc(24,21,9,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#8d9aa0'; ctx.beginPath(); ctx.arc(-24,21,3,0,Math.PI*2); ctx.arc(24,21,3,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#202020'; ctx.font='900 8px monospace'; ctx.fillText('DANFO',-21,-37); ctx.fillStyle='#f4ca3b'; ctx.fillRect(-33,-3,4,8); ctx.fillRect(29,-3,4,8); ctx.restore();
 }
 function drawEyo(object) {
   const x=roadLaneX(object.lane, object.y); const y=object.y; const scale=roadScale(object.y); ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale);
