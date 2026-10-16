@@ -616,12 +616,30 @@ async function loadIdentity() {
 }
 async function saveScore() {
   if(!signedIn)return;
-  const result=await askStartNg({type:'startng:score',stats:{distance:Math.floor(state.distance),lanterns:state.suya,money:state.money}},'startng:scoreSaved');
-  $('#save-message').textContent=result?.ok?`Best run saved. You're #${result.result?.rank??'—'} on the board.`:'Run saved on this device. The global board is unavailable.';
+  // start.ng accepts exactly the stat keys declared in startng.json. Money is
+  // gameplay-only, so keep it out of the leaderboard payload.
+  const stats={distance:Math.floor(state.distance),lanterns:state.suya};
+  const result=await askStartNg({type:'startng:score',stats},'startng:scoreSaved');
+  if(result?.ok) {
+    $('#save-message').textContent=result.result?.improved===false
+      ?`Run saved. Your best is #${result.result?.rank??'—'} on the board.`
+      :`Best run saved. You're #${result.result?.rank??'—'} on the board.`;
+  } else {
+    $('#save-message').textContent=result?.error
+      ?`Could not save to the global board: ${result.error}`
+      :'Run saved on this device. The global board is temporarily unavailable.';
+  }
 }
 async function loadLeaderboard() {
   const list=$('#leaderboard-list');list.replaceChildren();const loading=document.createElement('li');loading.textContent='Loading the legends…';list.append(loading);
-  try {const response=await fetch(`${API}/games/${GAME_NAME}/leaderboard?limit=8`);if(!response.ok)throw Error('Board unavailable');const entries=await response.json();
+  try {
+    const reply=await askStartNg({type:'startng:leaderboard',limit:8},'startng:leaderboardData');
+    let entries=reply?.ok&&Array.isArray(reply.entries)?reply.entries:null;
+    if(!entries) {
+      const response=await fetch(`${API}/games/${GAME_NAME}/leaderboard?limit=8`);
+      if(!response.ok)throw Error('Board unavailable');
+      entries=await response.json();
+    }
     list.replaceChildren(...entries.map(entry=>{const li=document.createElement('li'),name=document.createElement('span'),score=document.createElement('strong');name.textContent=`#${entry.rank} ${entry.name}`;score.textContent=`${entry.stats?.distance??entry.score??0}m · ${entry.stats?.lanterns??0} suya`;li.append(name,score);return li;}));
     if(!entries.length){loading.textContent='Be the first Lagos market legend.';list.append(loading);}
   }catch{loading.textContent='The board is taking a market break. Try again.';}
