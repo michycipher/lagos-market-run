@@ -2,6 +2,8 @@
 
 A real 3D market runner made for [start.ng](https://start.ng/games), using a locally included Three.js r180 (MIT). A jointed start.ng avatar runs continuously down a market aisle. Dodge traders stepping out of their shops, stock trolleys and Eyo masquerades, collect suya and scarce cash, buy pure water from a shouting hawker and throw it at a chasing Eyo. A service road, road crossings and passing traffic make the route increasingly dangerous.
 
+> Enjoying the Lagos run? Please give the project a ⭐ on [GitHub](https://github.com/michycipher/lagos-market-run). Your star helps people discover the game and keeps the market energy moving!
+
 ## Run locally
 
 Serve the folder with `python3 -m http.server 4173` and open `http://localhost:4173`. The 3D engine uses ES modules, so open the HTTP preview instead of a `file://` page. The game stays playable as a guest when start.ng is unavailable.
@@ -36,3 +38,7 @@ The game uses the start.ng connect page to load the current player or shared gue
 ## Verify
 
 Run `node tests/game.test.mjs` for automatic running, grounded animation, dodging, collection, collision, pause, market inventory, Tejuosho mall/footbridge generation, scarce-money water purchases, Eyo fleeing and bounded-world checks. Run `node tests/audio.test.mjs` for music scheduling, effects, mixing, mute and pause/resume checks. Serve the folder over HTTP for WebGL browser playtesting. No build step or CDN dependency is required for the engine.
+
+## Support the run
+
+If Lagos Market Run made you smile, made you shout “oya!”, or gave you a new high score, please [leave the repository a star on GitHub](https://github.com/michycipher/lagos-market-run). It is a small gesture that helps the project reach more players and supports future market updates.
