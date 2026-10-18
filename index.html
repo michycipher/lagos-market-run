@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#c46134" />
   <meta name="description" content="Run through a lively 3D Lagos market. Dodge traders, weave past stock trolleys, and collect suya among fabric shops and fresh produce stalls." />
   <title>Lagos Market Run</title>
-  <link rel="stylesheet" href="./style.css?v=market-run4" />
+  <link rel="stylesheet" href="./style.css?v=market-run5" />
 </head>
 <body>
   <main id="game" aria-label="Lagos Market Run 3D game">
-    <canvas id="game-canvas" tabindex="0" aria-label="3D Lagos market run. The player runs automatically. Left and right arrows or A and D to dodge. Move your mouse or swipe sideways to steer. Press E or use the action button near a shop to enter it."></canvas>
+    <canvas id="game-canvas" tabindex="0" aria-label="3D Lagos market run. The player runs automatically. Left and right arrows or A and D to dodge. Move your mouse or swipe sideways to steer. Press 5, E or use the action button near a shop or danfo stop to interact."></canvas>
     <header class="hud">
       <div class="player-card">
         <img id="player-face" alt="Your start.ng character" />
@@ -22,6 +22,7 @@
         <div class="suya-card" aria-label="Suya collected"><span aria-hidden="true">♨</span><strong id="suya-value">0</strong></div>
         <div class="cash-card" aria-label="Cash collected"><span aria-hidden="true">₦</span><strong id="money-value">0</strong></div>
         <div class="water-card" aria-label="Pure water held"><span aria-hidden="true">💧</span><strong id="water-value">0</strong></div>
+        <div class="bags-card" aria-label="Shopping bags"><span aria-hidden="true">🛍️</span><strong id="bags-value">0</strong></div>
         <button id="pause-button" class="round-button" aria-label="Pause game">Ⅱ</button>
         <button id="sound-button" class="round-button" aria-label="Sound and music settings" data-open="sound-dialog">♫</button>
       </div>
@@ -35,7 +36,7 @@
       <button id="start-button" class="primary-button">Start running <span>→</span></button>
       <p class="best-line">Your best: <strong id="best-value">0m</strong></p>
       <div class="panel-links"><button data-open="board-dialog">🏆 Leaderboard</button><button data-open="route-dialog">Explore the markets</button></div>
-      <p class="controls-hint">You run automatically · ← → or A / D to dodge<br>Move your mouse · swipe left or right on mobile</p>
+      <p class="controls-hint">You run automatically · ← → or A / D to dodge<br>Move your mouse · swipe left or right · 5 / E to shop or board a danfo</p>
     </section>
     <section id="gameover-overlay" class="panel hidden" aria-label="Run results">
       <span class="eyebrow">Omo! Lagos no dey wait.</span>
@@ -55,6 +56,21 @@
     </section>
     <div id="move-hint" class="move-hint hidden"><strong>Keep running!</strong><span>← → dodge · ↑ / W fires water at Eyo</span></div>
     <div id="shop-hint" class="shop-hint hidden" aria-live="polite"><strong>Shop stop</strong><span>Press E to step inside</span></div>
+    <div id="danfo-hint" class="shop-hint danfo-hint hidden" aria-live="polite"><strong>Danfo stop</strong><span>Press 5 to board</span></div>
+    <section id="shop-overlay" class="panel shop-panel hidden" aria-label="Market shop">
+      <span class="eyebrow">SHOPPING STOP</span><h2 id="shop-title">Market stall</h2>
+      <p id="shop-copy">Browse the stall and bag your purchase.</p>
+      <strong id="shop-item" class="shop-item">Market goods · ₦0</strong>
+      <p id="shop-wallet">Cash: ₦0 · Bags: 0</p><p id="shop-status">Press 5 to buy.</p>
+      <button id="shop-buy" class="primary-button">Buy and bag it</button>
+      <button id="shop-leave" class="secondary-button panel-secondary">Back to the run</button>
+    </section>
+    <section id="danfo-overlay" class="panel danfo-panel hidden" aria-label="Danfo stop">
+      <span class="eyebrow">DANFO STOP</span><h2 id="danfo-title">Enter the danfo</h2>
+      <p id="danfo-copy">Conductor dey shout. Choose your market stop and pay the fare.</p>
+      <div id="danfo-destinations" class="destination-list"></div>
+      <p id="danfo-status">Cash: ₦0</p><button id="danfo-leave" class="secondary-button">Stay in the market</button>
+    </section>
     <nav id="touch-controls" class="touch-controls hidden" aria-label="Movement controls">
       <button data-move="left" aria-label="Move left">←</button>
       <button id="interact-button" data-action="interact" aria-label="Buy pure water, enter a shop or throw water">💧</button>
@@ -66,6 +82,6 @@
     <dialog id="route-dialog" class="modal"><button class="close-button" data-close aria-label="Close market route">×</button><span class="eyebrow">19 STOPS. ONE CITY.</span><h2>The Lagos route</h2><p>A new market every 250 metres. Balogun's fabrics give way to Mushin's food sellers, Yaba's thrift shops and more. The run gets faster and the aisles busier.</p><ol id="market-route"></ol></dialog>
     <dialog id="sound-dialog" class="modal"><button class="close-button" data-close aria-label="Close sound settings">×</button><span class="eyebrow">THE SOUND OF THE HUSTLE</span><h2>Market groove</h2><p>An original highlife-inspired groove with percussion, plucked melody and bass. Footsteps, trader warnings, hawker calls and roadside horns keep you in the market.</p><label class="volume-label" for="music-volume">Music <output id="music-level">42%</output></label><input id="music-volume" type="range" min="0" max="100" value="42"><label class="volume-label" for="effects-volume">Effects & ambience <output id="effects-level">70%</output></label><input id="effects-volume" type="range" min="0" max="100" value="70"><div class="audio-buttons"><button id="preview-music" class="secondary-button">Preview the market groove</button><button id="audio-toggle" class="secondary-button">Mute all sound</button></div></dialog>
   </main>
-  <script type="module" src="./game.js?v=market-run4"></script>
+  <script type="module" src="./game.js?v=market-run5"></script>
 </body>
 </html>

@@ -16,7 +16,8 @@ Serve the folder with `python3 -m http.server 4173` and open `http://localhost:4
 - Touch: swipe sideways or tap the left/right buttons
 - `P`: pause/resume
 - `↑` or `W`: fire pure water at a chasing Eyo
-- `Space` or `E`: enter a nearby shop, buy a ₦20 pure water sachet, or interact with the nearest market moment; friendly hawkers also sell automatically when you meet them with enough cash
+- `5`, `Space` or `E`: enter a nearby shop, buy the displayed market item into a nylon shopping bag, board a danfo, buy a ₦20 pure-water sachet, or interact with the nearest market moment
+- Danfo stops: choose a later market, pay the displayed fare, ride inside the bus with passengers and listen for the conductor's call before being dropped at your destination
 - Touch controls are included for mobile play
 
 ## Lagos route
@@ -31,7 +32,9 @@ References used for the market themes: [Lagos wholesale market specialities](htt
 
 `market-audio.js` synthesizes an original highlife/Afrobeat-inspired loop with percussion, syncopated bass, plucked melody and chords, plus market ambience, distant horns, grounded footsteps, trader warning cues, natural-paced browser voice callouts with Nigerian English preference, money/purchase/water sounds and collision effects. It starts after a user gesture. Music and effects have independent volume controls, a preview button, master mute and saved preferences. Pausing or hiding the game stops the music scheduler; resuming never creates duplicate loops. No third-party music recordings are used.
 
-The perspective camera follows the runner like a handheld market recording. Side stalls have entrances: steer toward a shop, wait for its prompt and press `E` (or the mobile action button) to step into a short shop-floor view before returning to the run.
+The perspective camera follows the runner like a handheld market recording. Side stalls have entrances: steer toward a shop, wait for its prompt and press `5`/`E` (or the mobile action button) to step into the shop, buy the featured goods and see the purchase added to the avatar's nylon bags. Danfo stops open a destination panel, then move the camera inside a bus with passengers and a conductor before placing the runner at the selected market.
+
+The current callouts use the browser's speech-synthesis fallback, with Nigerian English preference where the device exposes it. start.ng's documented backend supplies identity, style and score/leaderboard integration, not human voice recordings or a voice API; replacing the fallback with a truly natural Nigerian performance requires recorded voice assets.
 
 ## start.ng integration
 

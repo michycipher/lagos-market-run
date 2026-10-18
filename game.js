@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import { MarketAudio } from './market-audio.js?v=market-run4';
+import { MarketAudio } from './market-audio.js?v=market-run5';
 
 const START_NG = 'https://start.ng';
 const API = 'https://api.start.ng';
@@ -27,13 +27,14 @@ const MARKETS = [
   ['Sangotedo Market','FRESH FOOD & SUYA','#a76135',['meat','peppers','provisions','onions']]
 ];
 const LANE_WIDTH=2.25, SEGMENT_LENGTH=16, STAGE_LENGTH=250, WATER_PRICE=20;
-const state={screen:'ready',distance:0,lane:0,suya:0,money:0,water:0,market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,shopVisit:null,
+const SHOP_ITEMS={clothes:{label:'Ankara fabric',price:35,color:'#dc8e33'},shoes:{label:'market shoes',price:50,color:'#3e8994'},bags:{label:'leather bag',price:60,color:'#ae693d'},onions:{label:'fresh onions',price:25,color:'#b66e91'},tomatoes:{label:'tomatoes',price:25,color:'#da4a2b'},peppers:{label:'ata rodo',price:25,color:'#c43b27'},meat:{label:'butchered meat',price:45,color:'#8c4b31'},fish:{label:'fresh fish',price:45,color:'#68888b'},provisions:{label:'market provisions',price:30,color:'#d6b65f'},beads:{label:'beads',price:40,color:'#bd6b30'},art:{label:'adire art',price:75,color:'#77472c'},baskets:{label:'woven basket',price:50,color:'#b58a4d'}};
+const state={screen:'ready',distance:0,lane:0,suya:0,money:0,water:0,bags:[],market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,shopVisit:null,danfoRide:null,
   eyoTipSeen:localStorage.getItem('lagos-market-eyo-tip-seen')==='1',
   best:Number(localStorage.getItem('lagos-market-run-best-distance')||0)};
 let identity={name:'Guest',style:{}},signedIn=false;
 const soundtrack=new MarketAudio();
 let framePromise,player,limbs,cameraZ=4,previousTime=0,lastHud=-1;
-const rows=new Map(),vehicles=[],traders=[],collectibles=[],moneyDrops=[],waterHawkers=[],obstacles=[],shopkeepers=[],shopHotspots=[];
+const rows=new Map(),vehicles=[],traders=[],collectibles=[],moneyDrops=[],waterHawkers=[],obstacles=[],shopkeepers=[],shopHotspots=[],danfoStops=[];
 const materialCache = new Map(), geometryCache = new Map();
 const canvas = $('#game-canvas');
 let renderer;
@@ -123,11 +124,13 @@ function createCharacter(style={}, scale=1) {
     else if(hat==='tophat'||hat==='top hat') {cylinder(body,.36,.36,.06,'#282827',0,2.1,0);cylinder(body,.24,.24,.35,'#282827',0,2.29,0);}
     else {sphere(body,.3,top,0,2.06,0,1,.6,1);if(hat==='cap')box(body,.34,.04,.3,top,0,2.08,.22);}
   }
-  root.userData={body,joints,mouth};return root;
+  const bagRack=new THREE.Group();bagRack.position.set(0,0,0);body.add(bagRack);
+  root.userData={body,joints,mouth,bagRack};return root;
 }
 function updatePlayer() {
   const old=player;player=createCharacter(identity.style);limbs=player.userData.joints;
   if(old){player.position.copy(old.position);player.rotation.copy(old.rotation);scene.remove(old);}scene.add(player);
+  syncShoppingBags();
   if(state.screen==='ready')player.rotation.y=.1;
 }
 
@@ -143,10 +146,17 @@ function makeVehicle(kind='danfo',color='#eebd24') {
   if(kind==='danfo') {
     length=4.1;box(g,4.1,.91,1.65,color,0,.9,0);box(g,3.85,.7,1.6,color,-.1,1.58,0);box(g,3.3,.08,1.32,'#bd8f25',-.1,1.98,0);
     for(const z of [-.811,.811]) {
-      box(g,3.55,.47,.025,'#253936',-.08,1.63,z);
+      const window=box(g,3.55,.47,.025,'#253936',-.08,1.63,z);window.material.transparent=true;window.material.opacity=.58;window.material.depthWrite=false;
       for(let i=0;i<5;i++)box(g,.055,.49,.04,color,-1.65+i*.72,1.63,z);
       box(g,4.12,.11,.034,'#23251e',0,1.02,z*1.03);box(g,4.12,.085,.034,'#23251e',0,.69,z*1.03);
     }
+    const passengers=[];
+    for(const [x,z] of [[-1.25,-.48],[-.45,.48],[.35,-.48],[1.12,.48]]){
+      const passenger=createCharacter({body:Math.abs(Math.round(x*10))%2?'female':'male',primaryColor:['#d97735','#397b74','#a44768','#c69a32'][passengers.length],secondaryColor:'#44382d',hair:passengers.length%2?'bun':'short'},.42);
+      passenger.position.set(x,.58,z);passenger.rotation.y=z<0?0:Math.PI;g.add(passenger);passengers.push(passenger);
+      box(g,.58,.12,.5,'#4c382b',x,.82,z);
+    }
+    const conductor=createCharacter({body:'male',primaryColor:'#e1a52d',secondaryColor:'#174b45',hair:'short',hat:'cap'},.44);conductor.position.set(1.55,.58,0);conductor.rotation.y=Math.PI/2;g.add(conductor);
     box(g,.026,.48,1.38,'#8baba5',2.06,1.58,0);box(g,.06,.18,1.14,'#252824',2.1,.8,0);
     for(const z of [-.59,.59])box(g,.07,.17,.23,'#fff2b2',2.11,1.01,z);
     box(g,4.25,.13,1.74,'#33352e',0,.51,0);box(g,.1,.21,.34,'#fff0c9',2.14,.56,0);
@@ -162,7 +172,7 @@ function makeVehicle(kind='danfo',color='#eebd24') {
     const rider=createCharacter({body:'male',primaryColor:color,secondaryColor:'#33382e',hair:'short'},.62);rider.position.set(-.12,.44,0);rider.rotation.y=Math.PI/2;g.add(rider);
   }
   const wheelList=wheels(g,length,kind==='okada'?.45:kind==='keke'?1.4:1.65);
-  g.userData={length,wheels:wheelList,kind};return g;
+  g.userData={length,wheels:wheelList,kind,passengers:g.children.filter(child=>child.userData?.body),conductor:g.children.find(child=>child.userData?.body&&child.position.x>1.4)};return g;
 }
 function makeEyo() {
   const g=new THREE.Group();
@@ -206,6 +216,21 @@ function makeMoney() {
   const inner=ring(g,.15,.025,'#fff0a8',0,.19,.04);inner.rotation.x=Math.PI/2;
   sign(g,'₦',0,.23,.055,.4,'#f1bf36');return g;
 }
+function makeNylonBag(color='#fff2db') {
+  const g=new THREE.Group();
+  box(g,.34,.4,.16,color,0,.21,0);
+  const handle=ring(g,.13,.018,'#d7c7a7',0,.49,0);handle.scale.y=1.35;
+  g.userData.kind='shopping-bag';return g;
+}
+function syncShoppingBags() {
+  if(!player?.userData?.bagRack)return;
+  for(const child of [...player.userData.bagRack.children])player.userData.bagRack.remove(child);
+  state.bags.forEach((bag,index)=>{
+    const obj=makeNylonBag(bag.color);
+    obj.position.set(index%2?-.38:.38,.56+Math.floor(index/2)*.08,.16);
+    obj.rotation.z=index%2?.12:-.12;obj.scale.setScalar(.72);player.userData.bagRack.add(obj);
+  });
+}
 function makeWaterHawker() {
   const g=createCharacter({body:'female',primaryColor:'#e2a52e',secondaryColor:'#2b6583',hair:'bun'},.9);
   const tray=box(g,1.05,.13,.7,'#e4d9bb',0,2.14,0);tray.rotation.z=.02;
@@ -235,6 +260,10 @@ let lastShout=-99;
 function shout(text,gap=2.2) {
   if(state.time<lastShout+gap)return;
   lastShout=state.time;soundtrack.voice(text,{rate:1.04,pitch:.98});
+}
+function conductorCall(text) {
+  if(state.time<lastShout+.45)return;
+  lastShout=state.time;soundtrack.voice(text,{rate:.84,pitch:.72});
 }
 const shopNames={clothes:['MAMA TITI ANKARA','LACE & ASO EBI','BISI TEXTILES'],shoes:['CHIKA SHOES','SNEAKER CORNER'],bags:['BOLA BAGS','LEATHER HOUSE'],
   onions:['ALHAJA ONIONS'],tomatoes:['FRESH TOMATOES'],peppers:['ATA RODO'],meat:['BABA BUTCHER','SUYA SPOT'],grains:['RICE, BEANS & GARRI'],fish:['EJA TUTU','FRESH FISH'],yam:['YAM DEPOT'],
@@ -389,6 +418,11 @@ function addRoadCrossing(index,z) {
   vehicles.push({obj,segment:index,speed:7.2+Math.min(3,state.market*.25),crossing:true});
   obstacles.push({obj,segment:index,z,lane:0,width:1.1,depth:1.35,kind:'road traffic',crossing:true});
 }
+function addDanfoStop(index,z) {
+  const obj=makeVehicle('danfo',index%2?'#228f5b':'#edb91c');obj.position.set(-5.35,0,z);obj.rotation.y=0;world.add(obj);
+  const marker=new THREE.Group();sign(marker,'DANFO STOP  ₦150',-LANE_WIDTH,2.8,z,2.8,'#f3c737');marker.visible=false;world.add(marker);
+  danfoStops.push({obj,segment:index,z,lane:-1,marker,visited:false,destinationIndex:Math.min(18,Math.floor(index*SEGMENT_LENGTH/STAGE_LENGTH)+1)});
+}
 function addRow(index) {
   const group=new THREE.Group();group.position.z=-index*SEGMENT_LENGTH;group.userData.index=index;world.add(group);rows.set(index,group);
   const stage=Math.min(18,Math.floor(Math.max(0,index*SEGMENT_LENGTH)/STAGE_LENGTH)),market=MARKETS[stage];
@@ -405,6 +439,7 @@ function addRow(index) {
   if(index%2===0){const obj=makeVehicle(index%2?'keke':'danfo',index%2?'#228f5b':'#edb91c');obj.position.set(-12.7,0,-index*SEGMENT_LENGTH);obj.rotation.y=Math.PI/2;world.add(obj);vehicles.push({obj,segment:index,speed:4.8+stage*.22});}
   if(index%5===0&&stage>=2){const obj=makeVehicle('danfo',index%3?'#d94d32':'#e8b51c');obj.position.set(-12.7,0,-index*SEGMENT_LENGTH-7);obj.rotation.y=Math.PI/2;world.add(obj);vehicles.push({obj,segment:index,speed:5.9+stage*.2});}
   if(index>6&&(index+stage)%7===0)addRoadCrossing(index,-index*SEGMENT_LENGTH);
+  if(index%3===0)addDanfoStop(index,-index*SEGMENT_LENGTH-6.2);
   if(index%2===0){tree(group,10,-5);box(group,2.5,.6,1.5,'#b79b6d',10,.3,2);}
   if(index>=2){
     // Keep the opening seller on the left so the starting lane always has a clean pass.
@@ -431,6 +466,7 @@ function discardRow(index) {
   for(const list of [vehicles,traders,collectibles,moneyDrops,waterHawkers,obstacles])for(let i=list.length-1;i>=0;i--)if(list[i].segment===index){world.remove(list[i].obj);if(list[i].marker){list[i].marker.traverse(o=>{for(const t of o.userData.textures||[])t.dispose();if(o.material?.map)o.material.dispose();});world.remove(list[i].marker);}list.splice(i,1);}
   for(let i=shopkeepers.length-1;i>=0;i--)if(shopkeepers[i].segment===index)shopkeepers.splice(i,1);
   for(let i=shopHotspots.length-1;i>=0;i--)if(shopHotspots[i].segment===index)shopHotspots.splice(i,1);
+  for(let i=danfoStops.length-1;i>=0;i--)if(danfoStops[i].segment===index){world.remove(danfoStops[i].obj);world.remove(danfoStops[i].marker);danfoStops.splice(i,1);}
 }
 function ensureWorld() {
   const segment=Math.floor(state.distance/SEGMENT_LENGTH);
@@ -439,25 +475,27 @@ function ensureWorld() {
 }
 
 function refreshHUD() {
-  $('#distance-value').textContent=Math.floor(state.distance);$('#suya-value').textContent=state.suya;$('#money-value').textContent=state.money;$('#water-value').textContent=state.water;
+  $('#distance-value').textContent=Math.floor(state.distance);$('#suya-value').textContent=state.suya;$('#money-value').textContent=state.money;$('#water-value').textContent=state.water;$('#bags-value').textContent=state.bags.length;
   $('#market-value').textContent=MARKETS[state.market][0];$('#stage-value').textContent=`${String(state.market+1).padStart(2,'0')} / 19`;
   $('#best-value').textContent=`${state.best}m`;
   document.querySelectorAll('#market-route li').forEach((li,i)=>li.classList.toggle('current',i===state.market));
   canvas.dataset.distance=state.distance.toFixed(1);canvas.dataset.lane=state.lane;canvas.dataset.screen=state.screen;
   canvas.dataset.music=soundtrack.running&&soundtrack.enabled?'playing':'paused';canvas.dataset.market=MARKETS[state.market][0];canvas.dataset.money=state.money;canvas.dataset.water=state.water;
-  const shop=state.screen==='playing'?nearbyShop():null;
-  $('#shop-hint').classList.toggle('hidden',!shop);
-  if(shop){$('#shop-hint strong').textContent=shop.name;$('#shop-hint span').textContent=`Press E to enter · ${shop.market}`;}
-  $('#interact-button').textContent=shop?'🛍️':'💧';$('#interact-button').setAttribute('aria-label',shop?'Enter the shop':'Buy pure water or throw water');
+  const shop=state.screen==='playing'?nearbyShop():null,danfo=state.screen==='playing'?nearbyDanfo():null;
+  $('#shop-hint').classList.toggle('hidden',!shop||!!danfo);$('#danfo-hint').classList.toggle('hidden',!danfo);
+  if(shop&&!danfo){$('#shop-hint strong').textContent=shop.name;$('#shop-hint span').textContent=`Press 5 or E to enter · ${shop.market}`;}
+  if(danfo){$('#danfo-hint strong').textContent='Danfo stop';$('#danfo-hint span').textContent=`Press 5 or E to board · ₦${danfoFare(Math.max(state.market+1,danfo.destinationIndex))}`;}
+  $('#interact-button').textContent=danfo?'🚌':shop?'🛍️':'💧';$('#interact-button').setAttribute('aria-label',danfo?'Board a danfo':shop?'Enter the shop':'Buy pure water or throw water');
   $('#sound-button').style.opacity=soundtrack.enabled?1:.5;
 }
 function startRun() {
   for(const r of [...rows.keys()])discardRow(r);
-  Object.assign(state,{screen:'playing',distance:0,lane:0,suya:0,money:0,water:0,market:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,shopVisit:null});
+  Object.assign(state,{screen:'playing',distance:0,lane:0,suya:0,money:0,water:0,bags:[],market:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,shopVisit:null,danfoRide:null});
   lastShout=-99;
   player.position.set(0,0,0);player.rotation.set(0,Math.PI,0);cameraZ=-4;
+  player.visible=true;syncShoppingBags();
   ensureWorld();
-  for(const id of ['title-overlay','gameover-overlay','pause-overlay','eyo-tutorial-overlay','stage-banner','shop-hint'])$('#'+id).classList.add('hidden');
+  for(const id of ['title-overlay','gameover-overlay','pause-overlay','eyo-tutorial-overlay','stage-banner','shop-hint','danfo-hint','shop-overlay','danfo-overlay'])$('#'+id).classList.add('hidden');
   $('#move-hint').classList.remove('hidden');$('#touch-controls').classList.remove('hidden');
   $('#pause-button').textContent='Ⅱ';$('#pause-button').setAttribute('aria-label','Pause game');
   soundtrack.start(0);refreshHUD();canvas.focus();
@@ -492,17 +530,59 @@ function nearbyShop() {
     return !shop.visited&&ahead<6.2&&ahead>-1.5&&Math.abs(player.position.x-shop.side*LANE_WIDTH)<1.35;
   });
 }
+function nearbyDanfo() {
+  return danfoStops.find(stop=>{
+    const ahead=-stop.z-state.distance;
+    return !stop.visited&&ahead<8&&ahead>-2&&Math.abs(player.position.x-stop.lane*LANE_WIDTH)<1.45;
+  });
+}
+function shopItem(shop) {return SHOP_ITEMS[shop?.type]||SHOP_ITEMS.provisions;}
+function refreshShopPanel() {
+  const visit=state.shopVisit;if(!visit)return;
+  const item=shopItem(visit.shop);$('#shop-title').textContent=visit.shop.name;$('#shop-copy').textContent=`${visit.shop.market} · Browse the stall, then carry your purchase in a nylon bag.`;
+  $('#shop-item').textContent=`${item.label} · ₦${item.price}`;$('#shop-wallet').textContent=`Cash: ₦${state.money} · Bags: ${state.bags.length}`;
+  $('#shop-buy').textContent=visit.purchased?'Bought — keep running':'Buy and bag it';$('#shop-buy').disabled=visit.purchased;
+  $('#shop-status').textContent=visit.purchased?'Purchase packed in your nylon bag.':state.money>=item.price?'Press 5 or buy below.':'You need more cash for this one.';
+}
 function enterShop(shop) {
   if(state.screen!=='playing'||!shop)return false;
   shop.visited=true;shop.prompt.visible=false;
-  state.screen='shop';state.shopVisit={shop,elapsed:0,targetX:shop.side*5.25,targetZ:shop.z+1.55};
+  state.screen='shop';state.shopVisit={shop,elapsed:0,targetX:shop.side*5.25,targetZ:shop.z+1.55,purchased:false};
   $('#shop-hint').classList.add('hidden');
+  $('#shop-overlay').classList.remove('hidden');refreshShopPanel();
   soundtrack.effect('purchase');shout(`Oya, welcome to ${shop.name}! Come inside and see!`,.2);
   refreshHUD();return true;
 }
+function buyShopItem() {
+  if(state.screen!=='shop'||!state.shopVisit||state.shopVisit.purchased)return false;
+  const item=shopItem(state.shopVisit.shop);
+  if(state.money<item.price){$('#shop-status').textContent='No enough cash, customer. Come back with money.';conductorCall('Oga, no money no entry o!');return false;}
+  state.money-=item.price;state.bags.push({label:item.label,color:item.color});state.shopVisit.purchased=true;syncShoppingBags();soundtrack.effect('purchase');conductorCall(`Oya, pack am for nylon. ${item.label} don enter!`);refreshShopPanel();refreshHUD();return true;
+}
 function leaveShop() {
-  state.shopVisit=null;state.screen='playing';soundtrack.start(state.market);
+  $('#shop-overlay').classList.add('hidden');state.shopVisit=null;state.screen='playing';soundtrack.start(state.market);
   shout('Oya, keep running!',.4);refreshHUD();
+}
+function danfoFare(destinationIndex) {return 150+Math.max(0,destinationIndex-state.market)*35;}
+function enterDanfo(stop) {
+  if(state.screen!=='playing'||!stop)return false;
+  stop.visited=true;stop.marker.visible=false;state.screen='danfo';state.danfoRide={stop,elapsed:0,destinationIndex:null,riding:false};player.visible=false;
+  const destinations=$('#danfo-destinations');destinations.replaceChildren();
+  const candidates=MARKETS.map((market,index)=>({market,index})).filter(item=>item.index>state.market).slice(0,6);
+  for(const {market,index} of candidates){const button=document.createElement('button');button.className='secondary-button';button.textContent=`${market[0]} · ₦${danfoFare(index)}`;button.addEventListener('click',()=>boardDanfo(index));destinations.append(button);}
+  $('#danfo-title').textContent='Enter the danfo';$('#danfo-copy').textContent='Conductor dey shout. Choose your market stop and pay the fare.';$('#danfo-status').textContent=`Cash: ₦${state.money}`;$('#danfo-overlay').classList.remove('hidden');
+  conductorCall('Oya enter! Where you dey go?');refreshHUD();return true;
+}
+function boardDanfo(destinationIndex) {
+  if(state.screen!=='danfo'||!state.danfoRide)return false;
+  const fare=danfoFare(destinationIndex);
+  if(state.money<fare){$('#danfo-status').textContent=`Conductor: ₦${fare} fare. You get only ₦${state.money}.`;conductorCall('Oga, no money no movement o!');return false;}
+  state.money-=fare;state.screen='danfoRide';state.danfoRide.destinationIndex=destinationIndex;state.danfoRide.riding=true;state.danfoRide.elapsed=0;$('#danfo-title').textContent='Inside the danfo';$('#danfo-copy').textContent=`Next stop: ${MARKETS[destinationIndex][0]}. Hold your shopping bags tight.`;$('#danfo-status').textContent=`Fare paid: ₦${fare} · Conductor: hold your change!`;$('#danfo-destinations').replaceChildren();soundtrack.effect('purchase');conductorCall(`Oya driver, move! ${MARKETS[destinationIndex][0]}!`);refreshHUD();return true;
+}
+function leaveDanfo() {
+  const ride=state.danfoRide;if(!ride)return;
+  if(ride.destinationIndex!==null){state.distance=Math.max(state.distance,ride.destinationIndex*STAGE_LENGTH+2);state.market=ride.destinationIndex;player.position.set(0,0,-state.distance);ensureWorld();shout(`Oya, ${MARKETS[ride.destinationIndex][0]}! Drop here!`,.2);}
+  $('#danfo-overlay').classList.add('hidden');state.danfoRide=null;state.screen='playing';player.visible=true;soundtrack.start(state.market);refreshHUD();
 }
 function buyWater(hawker) {
   if(!hawker||hawker.bought||state.money<WATER_PRICE)return false;
@@ -526,9 +606,13 @@ function throwWater() {
   soundtrack.effect('water');shout('Eyo don run! Water no dey fear you!',1);refreshHUD();return true;
 }
 function interact() {
+  if(state.screen==='shop'){buyShopItem();return;}
   if(state.screen!=='playing')return;
   const shop=nearbyShop();
-  if(shop){enterShop(shop);return;}
+  const danfo=nearbyDanfo();
+  const shopAhead=shop?-shop.z-state.distance:Infinity,danfoAhead=danfo?-danfo.z-state.distance:Infinity;
+  if(shop&&shopAhead<=danfoAhead){enterShop(shop);return;}
+  if(danfo){enterDanfo(danfo);return;}
   const hawker=waterHawkers.find(item=>!item.bought&&Math.abs(-item.z-state.distance)<3.4&&Math.abs(item.obj.position.x-player.position.x)<1.1);
   if(hawker){
     if(state.money>=WATER_PRICE)buyWater(hawker);
@@ -538,7 +622,7 @@ function interact() {
   throwWater();
 }
 function update(delta) {
-  const animated=state.screen==='playing'||state.screen==='ready'||state.screen==='shop';
+  const animated=state.screen==='playing'||state.screen==='ready'||state.screen==='shop'||state.screen==='danfo'||state.screen==='danfoRide';
   if(animated) {
     state.time+=delta;
     for(const vehicle of vehicles) {
@@ -547,6 +631,11 @@ function update(delta) {
       for(const wheel of vehicle.obj.userData.wheels)wheel.rotation.y+=delta*vehicle.speed;
     }
     for(const seller of shopkeepers){seller.obj.userData.joints.rightArm.rotation.z=-.45+Math.sin(state.time*2+seller.phase)*.28;seller.obj.rotation.y=Math.sin(state.time*.8+seller.phase)*.12;}
+    for(const stop of danfoStops){
+      const conductor=stop.obj.userData.conductor;
+      if(conductor){conductor.userData.joints.rightArm.rotation.z=-.62+Math.sin(state.time*8)*.22;conductor.userData.joints.leftArm.rotation.z=.35+Math.sin(state.time*6)*.12;}
+      stop.obj.userData.passengers?.forEach((passenger,index)=>{passenger.userData.joints.leftArm.rotation.x=Math.sin(state.time*1.7+index)*.12;passenger.userData.joints.rightArm.rotation.x=-Math.sin(state.time*1.7+index)*.12;});
+    }
     for(const c of collectibles)if(!c.collected){c.obj.rotation.y=state.time*.65;c.obj.position.y=.25+Math.sin(state.time*3+c.segment)*.07;}
     for(const coin of moneyDrops)if(!coin.collected){coin.obj.rotation.y=state.time*1.7;coin.obj.position.y=.3+Math.sin(state.time*4+coin.segment)*.08;}
   }
@@ -563,6 +652,8 @@ function update(delta) {
     enterMarket();ensureWorld();
     const shopStop=nearbyShop();
     for(const shop of shopHotspots){const ahead=-shop.z-state.distance;shop.prompt.visible=shop===shopStop&&ahead<6.2&&ahead>-1.5;}
+    const danfoStop=nearbyDanfo();
+    for(const stop of danfoStops){const ahead=-stop.z-state.distance;stop.marker.visible=stop===danfoStop&&ahead<8&&ahead>-2;}
     for(const trader of traders) {
       const ahead=-trader.z-state.distance;
       if(ahead<26&&ahead>-3&&!trader.warning){trader.warning=true;trader.marker.visible=true;soundtrack.effect('warn');const lines=trader.obj.userData.goods==='clothes'?['Oya, fine Ankara! Come and see am!','Madam, na your size! Come inside!']:trader.obj.userData.goods==='bags'?['Fine bags, quality leather! Come, make I show you!','Oya customer, this one fit you!']:['Oya customer, no pass! Come and buy!','Come closer, I get better price!'];shout(lines[trader.segment%lines.length]);}
@@ -613,10 +704,15 @@ function update(delta) {
     player.position.z=THREE.MathUtils.damp(player.position.z,visit.targetZ,8,delta);
     player.rotation.y=visit.shop.side<0?Math.PI*.72:Math.PI*1.28;
     limbs.leftArm.rotation.x=Math.sin(state.time*3)*.18;limbs.rightArm.rotation.x=-Math.sin(state.time*3)*.18;
-    if(visit.elapsed>2.7)leaveShop();
+    if(visit.elapsed>8)leaveShop();
   }
   if(state.screen==='ready') {player.position.y=Math.sin(state.time*2)*.025;player.userData.body.rotation.x=0;}
-  if(state.screen==='shop'&&state.shopVisit){
+  if((state.screen==='danfo'||state.screen==='danfoRide')&&state.danfoRide){
+    const ride=state.danfoRide,bus=ride.stop.obj;
+    cameraZ=THREE.MathUtils.damp(cameraZ,bus.position.z+3.6,7,delta);
+    camera.position.set(bus.position.x+.35,3.05,bus.position.z+3.6);camera.lookAt(bus.position.x,1.28,bus.position.z);
+    if(state.screen==='danfoRide'){ride.elapsed+=delta;if(ride.elapsed>4.8)leaveDanfo();}
+  } else if(state.screen==='shop'&&state.shopVisit){
     const visit=state.shopVisit;cameraZ=THREE.MathUtils.damp(cameraZ,visit.shop.z+2.8,7,delta);
     camera.position.set(visit.shop.side*11.3,5.7,visit.shop.z+8.8);camera.lookAt(visit.shop.side*5.2,1.25,visit.shop.z+.55);
   } else {
@@ -697,7 +793,10 @@ window.addEventListener('keydown',event=>{
   const key=event.key.length===1?event.key.toLowerCase():event.key;
   if(keyMap[key]){event.preventDefault();if(!event.repeat)move(keyMap[key]);}
   else if(key==='ArrowUp'||key==='w'){event.preventDefault();if(!event.repeat)throwWater();}
-  else if(key===' '||key==='e'){event.preventDefault();if(!event.repeat)interact();}
+  else if(key===' '||key==='e'||key==='5'){event.preventDefault();if(!event.repeat)interact();}
+  else if(key==='Enter'&&state.screen==='shop'){event.preventDefault();buyShopItem();}
+  else if(key==='Escape'&&state.screen==='shop'){event.preventDefault();leaveShop();}
+  else if(key==='Escape'&&(state.screen==='danfo'||state.screen==='danfoRide')){event.preventDefault();leaveDanfo();}
   else if(key==='p'||key==='Escape'){event.preventDefault();togglePause();}
   else if(key==='Enter'&&(state.screen==='ready'||state.screen==='gameover'))startRun();
 },{capture:true});
@@ -719,6 +818,7 @@ canvas.addEventListener('pointercancel',()=>{pointerStart=null;});
 for(const b of document.querySelectorAll('[data-move]'))b.addEventListener('pointerdown',event=>{event.preventDefault();move(b.dataset.move);});
 for(const b of document.querySelectorAll('[data-action="interact"]'))b.addEventListener('pointerdown',event=>{event.preventDefault();interact();});
 $('#start-button').onclick=startRun;$('#restart-button').onclick=startRun;$('#pause-button').onclick=togglePause;$('#resume-button').onclick=togglePause;$('#eyo-tutorial-button').onclick=dismissEyoTip;
+$('#shop-buy').onclick=buyShopItem;$('#shop-leave').onclick=leaveShop;$('#danfo-leave').onclick=leaveDanfo;
 $('#home-button').onclick=()=>{state.screen='ready';soundtrack.pause();player.rotation.set(0,0,0);$('#gameover-overlay').classList.add('hidden');$('#eyo-tutorial-overlay').classList.add('hidden');$('#title-overlay').classList.remove('hidden');refreshHUD();};
 $('#sign-in-button').onclick=()=>{location.href=`${START_NG}/?return_to=${encodeURIComponent(location.origin+location.pathname)}`;};
 let resumeAfterDialog=false;
