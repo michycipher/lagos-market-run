@@ -10,7 +10,7 @@
 </head>
 <body>
   <main id="game" aria-label="Lagos Market Run 3D game">
-    <canvas id="game-canvas" tabindex="0" aria-label="3D Lagos market run. The player runs automatically. Left and right arrows or A and D to dodge. Move your mouse or swipe sideways to steer."></canvas>
+    <canvas id="game-canvas" tabindex="0" aria-label="3D Lagos market run. The player runs automatically. Left and right arrows or A and D to dodge. Move your mouse or swipe sideways to steer. Press E or use the action button near a shop to enter it."></canvas>
     <header class="hud">
       <div class="player-card">
         <img id="player-face" alt="Your start.ng character" />
@@ -54,9 +54,10 @@
       <button id="eyo-tutorial-button" class="primary-button">Got it — keep running →</button>
     </section>
     <div id="move-hint" class="move-hint hidden"><strong>Keep running!</strong><span>← → dodge · ↑ / W fires water at Eyo</span></div>
+    <div id="shop-hint" class="shop-hint hidden" aria-live="polite"><strong>Shop stop</strong><span>Press E to step inside</span></div>
     <nav id="touch-controls" class="touch-controls hidden" aria-label="Movement controls">
       <button data-move="left" aria-label="Move left">←</button>
-      <button data-action="interact" aria-label="Buy pure water or throw water">💧</button>
+      <button id="interact-button" data-action="interact" aria-label="Buy pure water, enter a shop or throw water">💧</button>
       <button data-move="right" aria-label="Move right">→</button>
     </nav>
     <p id="loading" class="loading">Opening the market…</p>

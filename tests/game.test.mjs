@@ -34,6 +34,7 @@ run("move('left');move('left')");tick();assert.equal(run('state.lane'),-1,'lane 
 run('togglePause()');const time=run('state.time');tick();assert.equal(run('state.time'),time,'pause freezes traffic and animation');run('togglePause()');
 run('startRun();steerPointer({clientX:900})');tick();assert.equal(run('state.lane'),1,'mouse steers across the aisle');
 run('steerPointer({clientX:100})');tick();assert.equal(run('state.lane'),-1);
+run("startRun();const shop=shopHotspots.find(item=>item.segment===0&&item.side===-1);state.distance=-shop.z;player.position.set(-LANE_WIDTH,0,-state.distance);interact()");assert.equal(run('state.screen'),'shop','nearby shop can be entered from the runner lane');tick(280);assert.equal(run('state.screen'),'playing','shop visit returns the player to the run');
 run('startRun();state.distance=249.95;player.position.z=-249.95');tick(2);assert.equal(run('state.market'),1,'250m unlocks Mushin');
 const goods=code=>run(`(()=>{const found=new Set();${code}.traverse(o=>{if(o.userData.goods)found.add(o.userData.goods)});return [...found]})()`);
 run('startRun()');assert.deepEqual([...goods('rows.get(0)')].sort(),['bags','clothes','shoes'],'Balogun has actual fashion inventory');

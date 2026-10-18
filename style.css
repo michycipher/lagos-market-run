@@ -12,3 +12,7 @@
 /* Runner resources: scarce cash, purchased pure-water and a compact mobile HUD. */
 .cash-card,.water-card{display:flex;gap:5px;align-items:center;border:4px solid var(--ink);box-shadow:0 4px 0 var(--ink);background:var(--cream);border-radius:17px;margin-top:7px;padding:5px 10px}.cash-card span,.water-card span{font-family:system-ui;font-size:20px}.cash-card span{color:#4c8d52}.water-card span{font-size:17px}.cash-card strong,.water-card strong{font-size:20px}
 @media(max-width:560px){.cash-card,.water-card{border-width:3px;box-shadow:0 3px 0 var(--ink);margin-top:4px;gap:2px;padding:4px 6px;border-radius:13px}.cash-card span,.water-card span{font-size:16px}.cash-card strong,.water-card strong{font-size:17px}.hud-actions{gap:3px;flex-wrap:wrap;justify-content:flex-end;max-width:245px}.player-card{max-width:145px}.touch-controls button{width:48px;height:42px;font-size:21px}}
+
+/* Contextual shop prompt for side-stop interactions. */
+.shop-hint{position:fixed;z-index:6;left:50%;bottom:18%;transform:translateX(-50%);display:flex;flex-direction:column;gap:3px;align-items:center;padding:10px 17px;border:3px solid var(--ink);border-radius:14px;background:var(--yellow);box-shadow:0 4px 0 var(--ink);pointer-events:none;text-align:center}.shop-hint strong{font-size:16px}.shop-hint span{font-size:10px}
+@media(max-width:560px){.shop-hint{left:16px;bottom:96px;transform:none;align-items:flex-start}}

@@ -27,13 +27,13 @@ const MARKETS = [
   ['Sangotedo Market','FRESH FOOD & SUYA','#a76135',['meat','peppers','provisions','onions']]
 ];
 const LANE_WIDTH=2.25, SEGMENT_LENGTH=16, STAGE_LENGTH=250, WATER_PRICE=20;
-const state={screen:'ready',distance:0,lane:0,suya:0,money:0,water:0,market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,
+const state={screen:'ready',distance:0,lane:0,suya:0,money:0,water:0,market:0,time:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,shopVisit:null,
   eyoTipSeen:localStorage.getItem('lagos-market-eyo-tip-seen')==='1',
   best:Number(localStorage.getItem('lagos-market-run-best-distance')||0)};
 let identity={name:'Guest',style:{}},signedIn=false;
 const soundtrack=new MarketAudio();
 let framePromise,player,limbs,cameraZ=4,previousTime=0,lastHud=-1;
-const rows=new Map(),vehicles=[],traders=[],collectibles=[],moneyDrops=[],waterHawkers=[],obstacles=[],shopkeepers=[];
+const rows=new Map(),vehicles=[],traders=[],collectibles=[],moneyDrops=[],waterHawkers=[],obstacles=[],shopkeepers=[],shopHotspots=[];
 const materialCache = new Map(), geometryCache = new Map();
 const canvas = $('#game-canvas');
 let renderer;
@@ -46,7 +46,7 @@ renderer.setClearColor('#c46134');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#c46134');
 scene.fog = new THREE.Fog('#c46134',65,115);
-const camera = new THREE.OrthographicCamera(-16,16,10,-10,.1,160);
+const camera = new THREE.PerspectiveCamera(38,1,.1,180);
 const hemi = new THREE.HemisphereLight('#fff6df','#8b613c',2.5); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff2d4',3.2); sun.position.set(-12,22,10);
 sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-26;sun.shadow.camera.right=26;
@@ -234,7 +234,7 @@ function random(index,salt=0) { const v=Math.sin(index*127.1+salt*311.7+42.3)*43
 let lastShout=-99;
 function shout(text,gap=2.2) {
   if(state.time<lastShout+gap)return;
-  lastShout=state.time;soundtrack.voice(text,{rate:1.18,pitch:.96});
+  lastShout=state.time;soundtrack.voice(text,{rate:1.04,pitch:.98});
 }
 const shopNames={clothes:['MAMA TITI ANKARA','LACE & ASO EBI','BISI TEXTILES'],shoes:['CHIKA SHOES','SNEAKER CORNER'],bags:['BOLA BAGS','LEATHER HOUSE'],
   onions:['ALHAJA ONIONS'],tomatoes:['FRESH TOMATOES'],peppers:['ATA RODO'],meat:['BABA BUTCHER','SUYA SPOT'],grains:['RICE, BEANS & GARRI'],fish:['EJA TUTU','FRESH FISH'],yam:['YAM DEPOT'],
@@ -318,9 +318,14 @@ function stall(parent,side,z,index,slot) {
   for(let i=0;i<6;i++){box(g,.25,.08,2.1,'#ecd5a5',-1.5+i*.6,3.02,.2);}
   for(const x of [-1.65,1.65])box(g,.09,2.8,.09,'#755036',x,1.4,1.05);
   sign(g,shopNames[type][Math.abs(variant)%shopNames[type].length],0,2.5,1.12,3.3);
+  // Every stall has a small, reachable entrance. Entering it briefly changes
+  // the camera to a close shop-floor view before returning the player to the run.
+  box(g,.95,1.9,.08,'#35251f',0,.95,1.18);box(g,.78,1.72,.03,'#6b4a35',0,.9,1.23);
+  const prompt=sign(g,'PRESS E TO SHOP',0,3.42,1.35,2.45,'#f3d46a');prompt.visible=false;
   merchandise(g,type,Math.abs(variant));
   const keeper=createCharacter({body:variant%2?'female':'male',primaryColor:['#d97735','#1c8d78','#a44768'][Math.abs(variant)%3],secondaryColor:'#454335',hair:variant%2?'bun':'short'},.86);
   keeper.position.set(1.2,0,.3);g.add(keeper);shopkeepers.push({obj:keeper,segment:index,phase:random(index,slot+3)*6});
+  shopHotspots.push({segment:index,z:-index*SEGMENT_LENGTH+z,side,type,market:market[0],name:shopNames[type][Math.abs(variant)%shopNames[type].length],prompt,visited:false});
   if(variant%3===0){const umbrella=cylinder(g,0,1.4,.45,market[2],0,3.3,1.5,8);cylinder(g,.035,.035,3.1,'#68523a',0,1.5,1.5);}
 }
 function makeCart(goods='clothes') {
@@ -425,6 +430,7 @@ function discardRow(index) {
   world.remove(group);rows.delete(index);
   for(const list of [vehicles,traders,collectibles,moneyDrops,waterHawkers,obstacles])for(let i=list.length-1;i>=0;i--)if(list[i].segment===index){world.remove(list[i].obj);if(list[i].marker){list[i].marker.traverse(o=>{for(const t of o.userData.textures||[])t.dispose();if(o.material?.map)o.material.dispose();});world.remove(list[i].marker);}list.splice(i,1);}
   for(let i=shopkeepers.length-1;i>=0;i--)if(shopkeepers[i].segment===index)shopkeepers.splice(i,1);
+  for(let i=shopHotspots.length-1;i>=0;i--)if(shopHotspots[i].segment===index)shopHotspots.splice(i,1);
 }
 function ensureWorld() {
   const segment=Math.floor(state.distance/SEGMENT_LENGTH);
@@ -439,15 +445,19 @@ function refreshHUD() {
   document.querySelectorAll('#market-route li').forEach((li,i)=>li.classList.toggle('current',i===state.market));
   canvas.dataset.distance=state.distance.toFixed(1);canvas.dataset.lane=state.lane;canvas.dataset.screen=state.screen;
   canvas.dataset.music=soundtrack.running&&soundtrack.enabled?'playing':'paused';canvas.dataset.market=MARKETS[state.market][0];canvas.dataset.money=state.money;canvas.dataset.water=state.water;
+  const shop=state.screen==='playing'?nearbyShop():null;
+  $('#shop-hint').classList.toggle('hidden',!shop);
+  if(shop){$('#shop-hint strong').textContent=shop.name;$('#shop-hint span').textContent=`Press E to enter · ${shop.market}`;}
+  $('#interact-button').textContent=shop?'🛍️':'💧';$('#interact-button').setAttribute('aria-label',shop?'Enter the shop':'Buy pure water or throw water');
   $('#sound-button').style.opacity=soundtrack.enabled?1:.5;
 }
 function startRun() {
   for(const r of [...rows.keys()])discardRow(r);
-  Object.assign(state,{screen:'playing',distance:0,lane:0,suya:0,money:0,water:0,market:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0});
+  Object.assign(state,{screen:'playing',distance:0,lane:0,suya:0,money:0,water:0,market:0,speed:6.6,stride:0,lastFoot:0,bannerUntil:0,shopVisit:null});
   lastShout=-99;
   player.position.set(0,0,0);player.rotation.set(0,Math.PI,0);cameraZ=-4;
   ensureWorld();
-  for(const id of ['title-overlay','gameover-overlay','pause-overlay','eyo-tutorial-overlay','stage-banner'])$('#'+id).classList.add('hidden');
+  for(const id of ['title-overlay','gameover-overlay','pause-overlay','eyo-tutorial-overlay','stage-banner','shop-hint'])$('#'+id).classList.add('hidden');
   $('#move-hint').classList.remove('hidden');$('#touch-controls').classList.remove('hidden');
   $('#pause-button').textContent='Ⅱ';$('#pause-button').setAttribute('aria-label','Pause game');
   soundtrack.start(0);refreshHUD();canvas.focus();
@@ -476,10 +486,28 @@ function enterMarket() {
   if(next===state.market)return;state.market=next;state.bannerUntil=state.time+2.6;
   $('#stage-name').textContent=MARKETS[next][0];$('#stage-banner').classList.remove('hidden');soundtrack.market=next;soundtrack.effect('stage');
 }
+function nearbyShop() {
+  return shopHotspots.find(shop=>{
+    const ahead=-shop.z-state.distance;
+    return !shop.visited&&ahead<6.2&&ahead>-1.5&&Math.abs(player.position.x-shop.side*LANE_WIDTH)<1.35;
+  });
+}
+function enterShop(shop) {
+  if(state.screen!=='playing'||!shop)return false;
+  shop.visited=true;shop.prompt.visible=false;
+  state.screen='shop';state.shopVisit={shop,elapsed:0,targetX:shop.side*5.25,targetZ:shop.z+1.55};
+  $('#shop-hint').classList.add('hidden');
+  soundtrack.effect('purchase');shout(`Oya, welcome to ${shop.name}! Come inside and see!`,.2);
+  refreshHUD();return true;
+}
+function leaveShop() {
+  state.shopVisit=null;state.screen='playing';soundtrack.start(state.market);
+  shout('Oya, keep running!',.4);refreshHUD();
+}
 function buyWater(hawker) {
   if(!hawker||hawker.bought||state.money<WATER_PRICE)return false;
   state.money-=WATER_PRICE;state.water++;hawker.bought=true;hawker.obj.visible=false;hawker.marker.visible=false;
-  soundtrack.effect('purchase');shout('THANK YOU! PURE WATER FOR YOUR JOURNEY!',1);refreshHUD();return true;
+  soundtrack.effect('purchase');shout('Thank you, my customer! Pure water for your journey!',1);refreshHUD();return true;
 }
 function showEyoTip() {
   if(state.eyoTipSeen)return;
@@ -495,20 +523,22 @@ function throwWater() {
   const target=obstacles.filter(o=>o.kind==='Eyo masquerade'&&!o.fleeing).sort((a,b)=>Math.abs(a.obj.position.z-player.position.z)-Math.abs(b.obj.position.z-player.position.z))[0];
   if(!target||Math.abs(target.obj.position.z-player.position.z)>18)return false;
   state.water--;target.fleeing=true;target.chasing=false;target.stunned=1.2;target.obj.position.z=-state.distance-1.4;
-  soundtrack.effect('water');shout('EYO DON RUN! WATER NO DEY FEAR YOU!',1);refreshHUD();return true;
+  soundtrack.effect('water');shout('Eyo don run! Water no dey fear you!',1);refreshHUD();return true;
 }
 function interact() {
   if(state.screen!=='playing')return;
+  const shop=nearbyShop();
+  if(shop){enterShop(shop);return;}
   const hawker=waterHawkers.find(item=>!item.bought&&Math.abs(-item.z-state.distance)<3.4&&Math.abs(item.obj.position.x-player.position.x)<1.1);
   if(hawker){
     if(state.money>=WATER_PRICE)buyWater(hawker);
-    else {soundtrack.effect('warn');shout('CUSTOMER! BRING MONEY FIRST!',1);}
+    else {soundtrack.effect('warn');shout('Customer, bring money first!',1);}
     return;
   }
   throwWater();
 }
 function update(delta) {
-  const animated=state.screen==='playing'||state.screen==='ready';
+  const animated=state.screen==='playing'||state.screen==='ready'||state.screen==='shop';
   if(animated) {
     state.time+=delta;
     for(const vehicle of vehicles) {
@@ -531,9 +561,11 @@ function update(delta) {
     limbs.leftArm.rotation.x=-gait*.7;limbs.rightArm.rotation.x=gait*.7;limbs.leftArm.rotation.z=-.13;limbs.rightArm.rotation.z=.13;
     const foot=Math.floor(state.stride/Math.PI);if(foot!==state.lastFoot){state.lastFoot=foot;soundtrack.effect('footstep');}
     enterMarket();ensureWorld();
+    const shopStop=nearbyShop();
+    for(const shop of shopHotspots){const ahead=-shop.z-state.distance;shop.prompt.visible=shop===shopStop&&ahead<6.2&&ahead>-1.5;}
     for(const trader of traders) {
       const ahead=-trader.z-state.distance;
-      if(ahead<26&&ahead>-3&&!trader.warning){trader.warning=true;trader.marker.visible=true;soundtrack.effect('warn');const lines=trader.obj.userData.goods==='clothes'?['FINE ANKARA! OYA COME!','CUSTOMER, HOLD THIS CLOTH!']:trader.obj.userData.goods==='bags'?['FINE BAGS! DON PASS ME!','BUY THIS ONE, CUSTOMER!']:['CUSTOMER! COME AND BUY!','NO LOOKING, BUY SOMETHING!'];shout(lines[trader.segment%lines.length]);}
+      if(ahead<26&&ahead>-3&&!trader.warning){trader.warning=true;trader.marker.visible=true;soundtrack.effect('warn');const lines=trader.obj.userData.goods==='clothes'?['Oya, fine Ankara! Come and see am!','Madam, na your size! Come inside!']:trader.obj.userData.goods==='bags'?['Fine bags, quality leather! Come, make I show you!','Oya customer, this one fit you!']:['Oya customer, no pass! Come and buy!','Come closer, I get better price!'];shout(lines[trader.segment%lines.length]);}
       if(ahead<21&&ahead>-3)trader.phase=Math.min(1,trader.phase+delta*.75);
       if(trader.phase>.55&&trader.swerve&&ahead<13)trader.target=THREE.MathUtils.clamp((Math.round(player.position.x/LANE_WIDTH)+(Math.sin(state.time*4+trader.segment)>0?1:-1))*LANE_WIDTH,-LANE_WIDTH,LANE_WIDTH);
       const ease=trader.phase*trader.phase*(3-2*trader.phase);trader.obj.position.x=THREE.MathUtils.lerp(trader.from,trader.target,ease);
@@ -547,7 +579,7 @@ function update(delta) {
     if(state.screen==='playing')for(const hawker of waterHawkers){
       const ahead=-hawker.z-state.distance;
       if(hawker.bought)continue;
-      if(ahead<30&&ahead>-3&&!hawker.warning){hawker.warning=true;hawker.marker.visible=true;soundtrack.effect('warn');shout('COME AND BUY PURE WATER! CARRY AM!',1.6);}
+      if(ahead<30&&ahead>-3&&!hawker.warning){hawker.warning=true;hawker.marker.visible=true;soundtrack.effect('warn');shout('Cold pure water! Come and buy, carry am!',1.6);}
       if(ahead<20&&ahead>-3)hawker.phase=Math.min(1,hawker.phase+delta*.9);
       const ease=hawker.phase*hawker.phase*(3-2*hawker.phase);hawker.obj.position.x=THREE.MathUtils.lerp(hawker.from,hawker.target,ease);hawker.obj.userData.joints.rightArm.rotation.z=-.7+Math.sin(state.time*7)*.28;
       if(ahead<-3)hawker.marker.visible=false;
@@ -562,7 +594,7 @@ function update(delta) {
     if(state.screen==='playing')for(const o of obstacles)if(o.kind==='Eyo masquerade'){
       const ahead=-o.obj.position.z-state.distance;
       if(o.fleeing){o.obj.position.z-=delta*(10+state.market*.3);o.z=o.obj.position.z;continue;}
-      if(ahead<23&&ahead>-5&&!o.chasing){o.chasing=true;soundtrack.effect('eyo');shout('EYO DEY CHASE YOU! RUN!',1.4);showEyoTip();}
+      if(ahead<23&&ahead>-5&&!o.chasing){o.chasing=true;soundtrack.effect('eyo');shout('Eyo dey chase you! Run, run!',1.4);showEyoTip();}
       // Eyo advances down its own lane, but never tracks the player's lane.
       // One clean dodge is enough to pass; the scare comes from its speed and animation.
       if(o.chasing&&!o.stunned){o.obj.position.z+=delta*(5.2+state.market*.3);o.obj.position.x=o.baseX+Math.sin(state.time*2.5+o.segment)*.16;o.obj.rotation.z=Math.sin(state.time*10)*.12;o.obj.userData.scare.arms.forEach((arm,i)=>arm.rotation.z=(i?-1:1)*(.95+Math.sin(state.time*12)*.25));o.z=o.obj.position.z;}
@@ -570,21 +602,35 @@ function update(delta) {
     }
     if(state.screen==='playing')for(const o of obstacles)if(!o.fleeing&&Math.abs(o.obj.position.z-player.position.z)<o.depth+.25&&Math.abs(o.obj.position.x-player.position.x)<o.width+.22){finishRun(o.kind);break;}
     if(state.screen==='playing')for(const c of collectibles)if(!c.collected&&Math.abs(c.z-player.position.z)<.65&&Math.abs(c.obj.position.x-player.position.x)<.65){c.collected=true;c.obj.visible=false;state.suya++;soundtrack.effect('collect');refreshHUD();}
-    if(state.screen==='playing')for(const coin of moneyDrops)if(!coin.collected&&Math.abs(coin.z-player.position.z)<.68&&Math.abs(coin.obj.position.x-player.position.x)<.68){coin.collected=true;coin.obj.visible=false;state.money+=coin.value;soundtrack.effect('money');shout('NA MONEY! HOLD AM WELL!',1);refreshHUD();}
+    if(state.screen==='playing')for(const coin of moneyDrops)if(!coin.collected&&Math.abs(coin.z-player.position.z)<.68&&Math.abs(coin.obj.position.x-player.position.x)<.68){coin.collected=true;coin.obj.visible=false;state.money+=coin.value;soundtrack.effect('money');shout('Na money! Hold am well!',1);refreshHUD();}
     if(state.distance>24)$('#move-hint').classList.add('hidden');
     if(Math.floor(state.distance)!==lastHud){lastHud=Math.floor(state.distance);refreshHUD();}
     if(state.bannerUntil&&state.time>state.bannerUntil){$('#stage-banner').classList.add('hidden');state.bannerUntil=0;}
   }
+  if(state.screen==='shop'&&state.shopVisit){
+    const visit=state.shopVisit;visit.elapsed+=delta;
+    player.position.x=THREE.MathUtils.damp(player.position.x,visit.targetX,8,delta);
+    player.position.z=THREE.MathUtils.damp(player.position.z,visit.targetZ,8,delta);
+    player.rotation.y=visit.shop.side<0?Math.PI*.72:Math.PI*1.28;
+    limbs.leftArm.rotation.x=Math.sin(state.time*3)*.18;limbs.rightArm.rotation.x=-Math.sin(state.time*3)*.18;
+    if(visit.elapsed>2.7)leaveShop();
+  }
   if(state.screen==='ready') {player.position.y=Math.sin(state.time*2)*.025;player.userData.body.rotation.x=0;}
-  const desiredZ=-state.distance+(state.screen==='ready'?4:-6.5);
-  cameraZ=THREE.MathUtils.damp(cameraZ,desiredZ,5,delta);
-  camera.position.set(5.5,14,cameraZ+21);camera.lookAt(0,.6,cameraZ);
+  if(state.screen==='shop'&&state.shopVisit){
+    const visit=state.shopVisit;cameraZ=THREE.MathUtils.damp(cameraZ,visit.shop.z+2.8,7,delta);
+    camera.position.set(visit.shop.side*11.3,5.7,visit.shop.z+8.8);camera.lookAt(visit.shop.side*5.2,1.25,visit.shop.z+.55);
+  } else {
+    const desiredZ=-state.distance+(state.screen==='ready'?4:-1.8);
+    cameraZ=THREE.MathUtils.damp(cameraZ,desiredZ,5,delta);
+    const sway=Math.sin(state.time*1.25)*.12;
+    camera.position.set(player.position.x*.35+5.1+sway,7.4+Math.sin(state.time*2.1)*.04,cameraZ+10.6);
+    camera.lookAt(player.position.x*.2,.9,cameraZ-2.8);
+  }
   sun.position.set(-12,22,cameraZ+10);sun.target.position.set(0,0,cameraZ);sun.target.updateMatrixWorld();
 }
 function resize() {
   const width=innerWidth,height=innerHeight,aspect=width/height;
-  const viewHeight=aspect<.8?27:aspect>1.8?19:22;
-  camera.left=-viewHeight*aspect/2;camera.right=viewHeight*aspect/2;camera.top=viewHeight/2;camera.bottom=-viewHeight/2;camera.updateProjectionMatrix();renderer.setSize(width,height,false);
+  camera.aspect=aspect;camera.updateProjectionMatrix();renderer.setSize(width,height,false);
 }
 function frame(time) {
   const delta=Math.min(.035,(time-previousTime)/1000||0);previousTime=time;

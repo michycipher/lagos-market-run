@@ -2,7 +2,7 @@
 export class MarketAudio {
   constructor() {
     this.enabled=true;this.musicVolume=.42;this.effectsVolume=.7;this.running=false;
-    this.context=null;this.timer=null;this.step=0;this.nextBeat=0;this.market=0;this.foot=0;
+    this.context=null;this.timer=null;this.step=0;this.nextBeat=0;this.market=0;this.foot=0;this.voiceVoices=[];
     try{const saved=JSON.parse(globalThis.localStorage?.getItem('lagos-market-audio')||'{}');this.enabled=saved.enabled!==false;if(Number.isFinite(saved.music))this.musicVolume=Math.max(0,Math.min(1,saved.music));if(Number.isFinite(saved.effects))this.effectsVolume=Math.max(0,Math.min(1,saved.effects));}catch{/* Keep defaults when storage is unavailable. */}
   }
   init() {
@@ -102,7 +102,17 @@ export class MarketAudio {
     const synth=globalThis.speechSynthesis,Utterance=globalThis.SpeechSynthesisUtterance;
     if(!synth||!Utterance)return;
     try {
-      synth.cancel();const line=new Utterance(text);line.volume=1;line.rate=rate;line.pitch=pitch;synth.speak(line);
+      // Prefer an en-NG voice, then a familiar British English voice. Keeping
+      // the voice selection here makes every market call sound consistent.
+      this.voiceVoices=synth.getVoices?.()||this.voiceVoices;
+      const voice=this.voiceVoices.find(item=>/^en-NG$/i.test(item.lang))
+        ||this.voiceVoices.find(item=>/^en-GB/i.test(item.lang))
+        ||this.voiceVoices.find(item=>/^en-US/i.test(item.lang));
+      // Do not cut off a caller mid-sentence when two nearby stalls shout.
+      if(synth.speaking||synth.pending)return;
+      const line=new Utterance(text);line.lang='en-NG';line.volume=.92;line.rate=rate*.94;line.pitch=pitch;
+      if(voice)line.voice=voice;
+      synth.speak(line);
     } catch { /* Some embedded browsers expose speech synthesis but reject it. */ }
   }
   horn(level=.2) {
